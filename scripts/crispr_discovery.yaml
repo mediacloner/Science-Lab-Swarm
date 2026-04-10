@@ -1,0 +1,12 @@
+# Sample research script: CRISPR delivery methods discovery
+topic: "Novel CRISPR-Cas delivery methods for in vivo gene editing — lipid nanoparticles, AAV alternatives, and non-viral vectors"
+hours: 4
+persona: scout
+databases:
+  - semantic_scholar
+  - pubmed
+  - arxiv
+  - google_patents
+  - supplier_search
+index_to: crispr_research
+year_from: 2024

@@ -23,7 +23,12 @@ output/transcripts/*.md
 output/audio/*.mp3
 output/audio/*.json
 output/knowledge_base/*.db
+output/knowledge_base/chroma*/
 output/.live_*.json
+output/research/*.json
+output/research/*.md
+output/research/*.log
+output/research_cache/
 
 # Models (too large for git)
 models/

@@ -1,0 +1,12 @@
+# Sample research script: Cancer biomarker discovery scan
+topic: "Emerging liquid biopsy biomarkers for early-stage cancer detection — ctDNA, exosomes, circulating tumor cells, and multi-cancer early detection"
+hours: 6
+persona: trend_analyst
+databases:
+  - semantic_scholar
+  - pubmed
+  - openalex
+  - preprint_servers
+  - google_patents
+index_to: biomarker_research
+year_from: 2023

@@ -29,6 +29,10 @@ def print_menu():
     print("  [4] Quick test         (1 round, no synthesis)")
     print("  [5] List collections   (show indexed document sets)")
     print("  [6] Run script         (pre-configured analysis)")
+    print()
+    print("  [r] Research agent     (autonomous discovery, runs for hours)")
+    print("  [f] Quick research     (30-min focused scan)")
+    print()
     print("  [s] System status      (TabbyAPI, models, collections)")
     print("  [q] Quit")
     print()
@@ -130,6 +134,44 @@ def system_status():
     list_collections()
 
 
+def run_research_agent():
+    """Launch an autonomous research session."""
+    topic = get_input("Research topic/question")
+    if not topic:
+        print("  Topic is required.")
+        return
+
+    hours = get_input("Session duration in hours", "2")
+    persona = get_input("Persona (scout/product_hunter/trend_analyst)", "scout")
+    index_to = get_input("Index findings to collection (blank to skip)", "")
+
+    cmd = [sys.executable, "research.py", "-t", topic, "--hours", hours, "--persona", persona]
+    if index_to:
+        cmd.extend(["--index-to", index_to])
+
+    print(f"\n  Starting {hours}h research session: '{topic}'")
+    print(f"  Persona: {persona}")
+    print(f"  Press Ctrl+C to stop early (partial results will be saved)")
+    print()
+    subprocess.run(cmd)
+
+
+def run_quick_research():
+    """30-minute focused research scan."""
+    topic = get_input("Research topic/question")
+    if not topic:
+        print("  Topic is required.")
+        return
+    index_to = get_input("Index findings to collection (blank to skip)", "")
+
+    cmd = [sys.executable, "research.py", "-t", topic, "--hours", "0.5"]
+    if index_to:
+        cmd.extend(["--index-to", index_to])
+
+    print(f"\n  Starting 30-min quick scan: '{topic}'")
+    subprocess.run(cmd)
+
+
 def main():
     ensure_venv()
 
@@ -144,6 +186,8 @@ def main():
             "4": quick_test,
             "5": list_collections,
             "6": lambda: print("  TODO: Script runner"),
+            "r": run_research_agent,
+            "f": run_quick_research,
             "s": system_status,
             "q": lambda: sys.exit(0),
         }

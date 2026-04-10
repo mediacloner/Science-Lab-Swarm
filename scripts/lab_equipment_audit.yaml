@@ -1,0 +1,9 @@
+# Sample research script: Lab equipment and product discovery
+topic: "Latest automated liquid handling systems, plate readers, and high-throughput screening instruments for drug discovery labs"
+hours: 1
+persona: product_hunter
+databases:
+  - supplier_search
+  - duckduckgo
+  - google_patents
+index_to: equipment_research

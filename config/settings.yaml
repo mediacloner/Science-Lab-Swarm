@@ -28,6 +28,13 @@ models:
     temperature: 0.4      # Low temp for precise statistical reasoning
     top_p: 0.85
     max_tokens: 2048
+  researcher:  # Autonomous Research Agent (uses PI model by default)
+    name: "gemma-3-12b-it-exl2-4.0bpw"
+    path: "models/gemma-3-12b-it-exl2-4.0bpw"
+    max_seq_len: 8192
+    temperature: 0.8      # Higher creativity for discovery and exploration
+    top_p: 0.95
+    max_tokens: 2048
 
 # Analysis workflow parameters
 analysis:
@@ -61,7 +68,7 @@ vector_store:
   distance_metric: "cosine"
   top_k: 10                     # Retrieved chunks per query
 
-# Literature search
+# Literature search (used by analysis agents)
 research:
   enabled: true
   sources:
@@ -71,6 +78,27 @@ research:
   max_results_per_query: 10
   max_content_chars: 3000       # Longer for scientific abstracts
   crossref_email: ""            # Optional: for polite Crossref API usage
+
+# Autonomous Research Agent — long-running discovery sessions
+research_agent:
+  default_time_limit_hours: 2   # Default session duration
+  max_time_limit_hours: 24      # Hard cap on session length
+  cycle_interval_minutes: 10    # Time between search cycles
+  checkpoint_every_cycles: 3    # Save progress every N cycles
+  synthesis_every_cycles: 5     # Generate intermediate report every N cycles
+  max_results_per_query: 20     # Results per database per query
+  year_from: null               # Filter papers from this year (null = no filter)
+  databases:                    # Databases to search (order = priority)
+    - "semantic_scholar"        # Comprehensive scholarly data + citations
+    - "openalex"                # Open scholarly metadata, good for trends
+    - "arxiv"                   # Preprints (physics, CS, bio, math)
+    - "pubmed"                  # Biomedical literature
+    - "google_patents"          # Patent filings via DuckDuckGo
+    - "supplier_search"         # Lab products (Sigma, Thermo, Bio-Rad, etc.)
+    - "preprint_servers"        # bioRxiv, medRxiv, chemRxiv
+    - "duckduckgo"              # General web (news, press releases, blogs)
+  output_dir: "output/research" # Where to save reports and checkpoints
+  auto_index: true              # Auto-index top findings into ChromaDB
 
 # Output settings
 output:

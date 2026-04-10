@@ -144,14 +144,22 @@ def run_research_agent():
     hours = get_input("Session duration in hours", "2")
     persona = get_input("Persona (scout/product_hunter/trend_analyst)", "scout")
     index_to = get_input("Index findings to collection (blank to skip)", "")
+    collaborative = get_input("Collaborative mode - live index to collection (blank to skip)", "")
+    protocols = get_input("Generate lab protocols? (y/n)", "y")
 
     cmd = [sys.executable, "research.py", "-t", topic, "--hours", hours, "--persona", persona]
     if index_to:
         cmd.extend(["--index-to", index_to])
+    if collaborative:
+        cmd.extend(["--collaborative", collaborative])
+    if protocols.lower() != "y":
+        cmd.append("--no-protocols")
 
     print(f"\n  Starting {hours}h research session: '{topic}'")
-    print(f"  Persona: {persona}")
+    print(f"  Persona: {persona} | Protocols: {protocols}")
+    print(f"  Adaptive timing — cycles run as fast as APIs allow")
     print(f"  Press Ctrl+C to stop early (partial results will be saved)")
+    print(f"  Reports: output/research/ (JSON + Markdown + PDF)")
     print()
     subprocess.run(cmd)
 

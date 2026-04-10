@@ -11,8 +11,11 @@ Usage:
     # Quick 30-minute scan with product-hunting persona
     python research.py -t "automated liquid handling systems" --hours 0.5 --persona product_hunter
 
-    # Full day session filtering papers from 2024+
-    python research.py -t "mRNA vaccine stability" --hours 12 --year-from 2024
+    # Collaborative mode — research agent feeds findings to analysis agents in real-time
+    python research.py -t "mRNA stability" --hours 4 --collaborative my_collection
+
+    # Skip protocol generation for speed
+    python research.py -t "quick topic scan" --hours 0.5 --no-protocols
 """
 
 import argparse
@@ -41,6 +44,7 @@ Examples:
   python research.py -t "CRISPR delivery" --hours 2
   python research.py -t "biomarkers" --hours 8 --index-to my_collection
   python research.py -t "liquid handling" --hours 0.5 --persona product_hunter
+  python research.py -t "mRNA stability" --hours 4 --collaborative live_findings
         """,
     )
     parser.add_argument("--topic", "-t", required=True, help="Research topic or question")
@@ -49,7 +53,10 @@ Examples:
     parser.add_argument("--databases", nargs="+", default=None,
                         help="Databases to search (semantic_scholar arxiv pubmed openalex google_patents supplier_search preprint_servers duckduckgo)")
     parser.add_argument("--index-to", default=None, help="Index top findings into this ChromaDB collection")
+    parser.add_argument("--collaborative", default=None, metavar="COLLECTION",
+                        help="Real-time collaborative mode — index findings immediately for analysis agents")
     parser.add_argument("--year-from", type=int, default=None, help="Only include papers from this year onwards")
+    parser.add_argument("--no-protocols", action="store_true", help="Skip protocol generation")
     parser.add_argument("--config", default="config/settings.yaml", help="Config file path")
     parser.add_argument("--check", action="store_true", help="Check TabbyAPI connectivity and exit")
     args = parser.parse_args()
@@ -77,15 +84,23 @@ Examples:
         logger.warning(f"Requested {args.hours}h exceeds max ({max_hours}h), capping")
         args.hours = max_hours
 
+    # Show memory context
+    memory_summary = orchestrator.memory.get_memory_summary()
+
     print(f"\n{'='*60}")
     print(f"  Autonomous Research Agent")
     print(f"{'='*60}")
-    print(f"  Topic:    {args.topic}")
-    print(f"  Duration: {args.hours} hours")
-    print(f"  Persona:  {args.persona or 'scout (default)'}")
-    print(f"  Databases: {args.databases or 'all configured'}")
+    print(f"  Topic:         {args.topic}")
+    print(f"  Duration:      {args.hours} hours")
+    print(f"  Persona:       {args.persona or 'scout (default)'}")
+    print(f"  Databases:     {args.databases or 'all configured'}")
+    print(f"  Protocols:     {'disabled' if args.no_protocols else 'enabled'}")
     if args.index_to:
-        print(f"  Index to: {args.index_to}")
+        print(f"  Index to:      {args.index_to}")
+    if args.collaborative:
+        print(f"  Collaborative: {args.collaborative} (real-time indexing)")
+    print(f"  Cycle timing:  adaptive (no fixed interval)")
+    print(f"\n  {memory_summary}")
     print(f"{'='*60}\n")
 
     try:
@@ -95,13 +110,15 @@ Examples:
             persona_name=args.persona,
             databases=args.databases,
             index_to_collection=args.index_to,
+            generate_protocols=not args.no_protocols,
+            collaborative_collection=args.collaborative,
         )
 
         print(f"\n{'='*60}")
         print(f"  Research Session Complete")
         print(f"{'='*60}")
-        print(f"  Duration:      {session.elapsed_hours:.1f} hours")
-        print(f"  Cycles:        {session.cycle}")
+        print(f"  Duration:      {session.elapsed_hours:.1f} hours ({session.cycle} cycles)")
+        print(f"  Avg cycle:     {session.avg_cycle_time:.0f}s")
         print(f"  Queries:       {session.total_queries}")
         print(f"  Total results: {session.total_results}")
         print(f"")
@@ -111,6 +128,7 @@ Examples:
         print(f"  Opportunities: {len(session.opportunities)}")
         print(f"  Patents:       {len(session.patents)}")
         print(f"  Competitors:   {len(session.competitors)}")
+        print(f"  Protocols:     {len(session.protocols)}")
         print(f"")
         print(f"  Reports saved to: output/research/")
         print(f"{'='*60}")

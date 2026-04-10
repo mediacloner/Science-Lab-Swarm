@@ -27,8 +27,10 @@ output/knowledge_base/chroma*/
 output/.live_*.json
 output/research/*.json
 output/research/*.md
+output/research/*.pdf
 output/research/*.log
 output/research_cache/
+output/research_memory/*.json
 
 # Models (too large for git)
 models/

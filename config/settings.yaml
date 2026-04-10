@@ -83,9 +83,15 @@ research:
 research_agent:
   default_time_limit_hours: 2   # Default session duration
   max_time_limit_hours: 24      # Hard cap on session length
-  cycle_interval_minutes: 10    # Time between search cycles
+
+  # ADAPTIVE TIMING — cycles run back-to-back, only pausing if a cycle
+  # finishes faster than min_cycle_pause_seconds (e.g., all results cached).
+  # No fixed interval — the agent works as fast as the APIs allow.
+  min_cycle_pause_seconds: 30   # Minimum pause between cycles (only if cycle was very fast)
+
   checkpoint_every_cycles: 3    # Save progress every N cycles
   synthesis_every_cycles: 5     # Generate intermediate report every N cycles
+  trends_every_cycles: 4        # Run trend detection every N cycles
   max_results_per_query: 20     # Results per database per query
   year_from: null               # Filter papers from this year (null = no filter)
   databases:                    # Databases to search (order = priority)
@@ -99,6 +105,20 @@ research_agent:
     - "duckduckgo"              # General web (news, press releases, blogs)
   output_dir: "output/research" # Where to save reports and checkpoints
   auto_index: true              # Auto-index top findings into ChromaDB
+
+# Email notifications (optional — for long-running research sessions)
+notifications:
+  email:
+    enabled: false
+    smtp_host: "smtp.gmail.com"
+    smtp_port: 587
+    username: ""                # Your email address
+    password: ""                # App password (not your regular password!)
+    from_address: ""            # Defaults to username
+    to_addresses: []            # List of recipient emails
+    notify_on_complete: true    # Email when session finishes
+    notify_on_milestone: true   # Email at milestone intervals
+    milestone_interval_cycles: 10  # Email every N cycles
 
 # Output settings
 output:

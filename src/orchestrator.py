@@ -153,6 +153,19 @@ class Orchestrator:
         state.phase = "done"
         state.finished = True
         state.save(self.config["output"]["transcripts_dir"])
+
+        # Generate PDF report
+        try:
+            from src.reports.pdf_report import generate_analysis_pdf
+            import time as _time
+            timestamp = _time.strftime("%Y%m%d_%H%M%S")
+            pdf_path = Path(self.config["output"]["transcripts_dir"]) / f"analysis_{timestamp}.pdf"
+            generate_analysis_pdf(state, pdf_path)
+        except ImportError:
+            logger.warning("reportlab not installed — skipping PDF (pip install reportlab)")
+        except Exception as e:
+            logger.error(f"PDF generation failed: {e}")
+
         self._publish_live_status(state)
 
         logger.info(f"Analysis complete. Reason: {state.finish_reason}")

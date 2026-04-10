@@ -4,21 +4,26 @@ This orchestrator manages multi-hour research sessions where the Researcher Agen
 autonomously searches scientific databases, follows citation chains, discovers
 products, evaluates findings, and produces a comprehensive discovery report.
 
-The session runs in cycles:
-  1. PLAN: Agent generates search queries based on topic + prior findings
+The session runs in ADAPTIVE cycles (no fixed interval — next cycle starts
+as soon as the previous one finishes, with a configurable minimum pause):
+
+  1. PLAN: Agent generates search queries based on topic + prior findings + memory
   2. SEARCH: Execute queries across databases (rate-limited, cached)
   3. EVALUATE: Agent scores and categorizes findings
-  4. DEEP DIVE: Extract full text from top-scoring results
-  5. SYNTHESIZE: Periodically generate intermediate reports
-  6. CHECKPOINT: Save progress (resumable if interrupted)
+  4. DEEP DIVE: Extract full text from top-scoring results + follow citations
+  5. TRENDS: Detect emerging hot topics, citation velocity, keyword shifts
+  6. PROTOCOLS: Generate lab protocols for top actionable findings
+  7. SYNTHESIZE: Periodically generate intermediate reports
+  8. CHECKPOINT: Save progress (resumable if interrupted)
+  9. NOTIFY: Email milestone notifications
 
-Repeats until time limit is reached.
+Repeats until time limit is reached, then generates final report + protocols.
 """
 
 import json
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 import yaml
@@ -29,7 +34,11 @@ from src.research.deep_search import (
     deep_search, extract_full_text, search_semantic_scholar_citations,
     DATABASE_FUNCTIONS,
 )
+from src.research.trend_detector import TrendDetector
+from src.research.session_memory import SessionMemory
+from src.research.protocol_generator import ProtocolGenerator
 from src.ingestion.indexer import DocumentIndexer
+from src.notifications.email_notifier import EmailNotifier
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +64,7 @@ class ResearchSession:
         self.search_history: list[str] = []
         self.citation_chains_followed: list[str] = []
         self.intermediate_reports: list[str] = []
+        self.cycle_timings: list[dict] = []
 
         # Discovery categories
         self.papers: list[dict] = []
@@ -63,6 +73,12 @@ class ResearchSession:
         self.opportunities: list[dict] = []
         self.patents: list[dict] = []
         self.competitors: list[dict] = []
+
+        # Protocols generated
+        self.protocols: list[dict] = []
+
+        # Trend snapshots
+        self.trend_reports: list[str] = []
 
         self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -77,6 +93,13 @@ class ResearchSession:
     @property
     def is_expired(self) -> bool:
         return time.time() >= self.deadline
+
+    @property
+    def avg_cycle_time(self) -> float:
+        """Average cycle duration in seconds."""
+        if not self.cycle_timings:
+            return 0
+        return sum(t["duration"] for t in self.cycle_timings) / len(self.cycle_timings)
 
     def add_findings(self, findings: list[dict]):
         """Add raw findings (deduplicating by title)."""
@@ -94,12 +117,9 @@ class ResearchSession:
         category = evaluation.get("category", "paper")
 
         target = {
-            "paper": self.papers,
-            "preprint": self.papers,
-            "product": self.products,
-            "technique": self.techniques,
-            "opportunity": self.opportunities,
-            "patent": self.patents,
+            "paper": self.papers, "preprint": self.papers,
+            "product": self.products, "technique": self.techniques,
+            "opportunity": self.opportunities, "patent": self.patents,
             "competitor": self.competitors,
         }.get(category, self.papers)
 
@@ -117,6 +137,7 @@ class ResearchSession:
             "cycle": self.cycle,
             "total_queries": self.total_queries,
             "total_results": self.total_results,
+            "avg_cycle_seconds": round(self.avg_cycle_time, 1),
             "search_history": self.search_history,
             "papers_found": len(self.papers),
             "products_found": len(self.products),
@@ -124,8 +145,10 @@ class ResearchSession:
             "opportunities_found": len(self.opportunities),
             "patents_found": len(self.patents),
             "competitors_found": len(self.competitors),
+            "protocols_generated": len(self.protocols),
             "top_findings": self.top_findings[:50],
             "all_findings_count": len(self.all_findings),
+            "cycle_timings": self.cycle_timings[-20:],
         }
         path.write_text(json.dumps(state, indent=2, default=str))
         logger.info(f"Checkpoint saved: {path}")
@@ -139,19 +162,22 @@ class ResearchSession:
             "cycles_completed": self.cycle,
             "total_queries": self.total_queries,
             "total_unique_results": self.total_results,
+            "avg_cycle_seconds": round(self.avg_cycle_time, 1),
             "papers": self.papers,
             "products": self.products,
             "techniques": self.techniques,
             "opportunities": self.opportunities,
             "patents": self.patents,
             "competitors": self.competitors,
+            "protocols": self.protocols,
+            "trend_reports": self.trend_reports,
             "search_history": self.search_history,
             "intermediate_reports": self.intermediate_reports,
         }
 
 
 class ResearchOrchestrator:
-    """Runs autonomous multi-hour research sessions."""
+    """Runs autonomous multi-hour research sessions with adaptive timing."""
 
     def __init__(self, config_path: str = "config/settings.yaml"):
         with open(config_path) as f:
@@ -172,6 +198,12 @@ class ResearchOrchestrator:
         )
 
         self.research_cfg = self.config.get("research_agent", {})
+        self.memory = SessionMemory()
+        self.trend_detector = TrendDetector()
+
+        # Email notifications
+        notify_cfg = self.config.get("notifications", {}).get("email", {})
+        self.notifier = EmailNotifier(notify_cfg)
 
     def run_session(
         self,
@@ -180,6 +212,8 @@ class ResearchOrchestrator:
         persona_name: str | None = None,
         databases: list[str] | None = None,
         index_to_collection: str | None = None,
+        generate_protocols: bool = True,
+        collaborative_collection: str | None = None,
     ) -> ResearchSession:
         """Run an autonomous research session.
 
@@ -189,8 +223,13 @@ class ResearchOrchestrator:
             persona_name: Researcher persona to use
             databases: Which databases to search (default: all)
             index_to_collection: If set, index top findings into this ChromaDB collection
+            generate_protocols: Generate lab protocols for top actionable findings
+            collaborative_collection: If set, index findings in real-time for analysis agents
         """
-        session = ResearchSession(topic, time_limit_hours)
+        session = ResearchSession(
+            topic, time_limit_hours,
+            output_dir=self.research_cfg.get("output_dir", "output/research"),
+        )
         model_cfg = self.config["models"].get("researcher", self.config["models"]["pi"])
 
         if databases is None:
@@ -206,12 +245,35 @@ class ResearchOrchestrator:
         if not self.tabby.health_check():
             raise ConnectionError("TabbyAPI is not reachable. Start it first.")
 
+        # Check cross-session memory for context
+        memory_context = ""
+        known_titles = self.memory.get_known_titles()
+        past_queries = self.memory.get_successful_query_patterns(topic, top_n=5)
+        related_topics = self.memory.get_related_topics(topic, depth=2)
+        pending_leads = self.memory.get_pending_leads(10)
+
+        if known_titles:
+            memory_context += f"\nPreviously discovered: {len(known_titles)} findings across past sessions."
+        if past_queries:
+            memory_context += f"\nHigh-performing queries for similar topics: {past_queries[:3]}"
+        if related_topics:
+            topics_str = ", ".join(t["topic"] for t in related_topics[:5])
+            memory_context += f"\nRelated topics from knowledge graph: {topics_str}"
+        if pending_leads:
+            leads_str = "; ".join(l["title"][:40] for l in pending_leads[:3])
+            memory_context += f"\nPending leads to follow up: {leads_str}"
+
         logger.info(f"Starting research session: '{topic}' | limit: {time_limit_hours}h | databases: {databases}")
+        if memory_context:
+            logger.info(f"Memory context: {memory_context}")
         self._publish_status(session, "running")
 
-        cycle_interval = self.research_cfg.get("cycle_interval_minutes", 10) * 60
+        # Adaptive timing config
+        min_cycle_pause = self.research_cfg.get("min_cycle_pause_seconds", 30)
         checkpoint_every = self.research_cfg.get("checkpoint_every_cycles", 3)
         synthesis_every = self.research_cfg.get("synthesis_every_cycles", 5)
+        trends_every = self.research_cfg.get("trends_every_cycles", 4)
+        milestone_every = self.notifier.milestone_interval_cycles
         max_results_per_query = self.research_cfg.get("max_results_per_query", 20)
         year_from = self.research_cfg.get("year_from")
 
@@ -220,15 +282,22 @@ class ResearchOrchestrator:
                 session.cycle += 1
                 cycle_start = time.time()
                 logger.info(f"\n{'='*60}")
-                logger.info(f"CYCLE {session.cycle} | Elapsed: {session.elapsed_hours:.1f}h | Remaining: {session.remaining_hours:.1f}h")
+                logger.info(f"CYCLE {session.cycle} | Elapsed: {session.elapsed_hours:.1f}h | "
+                            f"Remaining: {session.remaining_hours:.1f}h | "
+                            f"Avg cycle: {session.avg_cycle_time:.0f}s")
                 logger.info(f"{'='*60}")
 
-                # === Step 1: PLAN ===
-                search_plan = self._plan_searches(agent, model_cfg, session)
+                # === Step 1: PLAN (with memory context) ===
+                search_plan = self._plan_searches(agent, model_cfg, session, memory_context)
 
                 if not search_plan:
                     logger.warning("Agent produced no search plan, generating fallback queries")
                     search_plan = [{"query": f"{topic} {datetime.now().year}", "database": "semantic_scholar"}]
+
+                # Inject pending leads as queries
+                for lead in pending_leads[:2]:
+                    search_plan.append({"query": lead["title"], "database": "semantic_scholar", "rationale": "follow-up from pending lead"})
+                    self.memory.mark_lead_followed(lead["title"])
 
                 # === Step 2: SEARCH ===
                 cycle_findings = []
@@ -245,16 +314,22 @@ class ResearchOrchestrator:
                     session.search_history.append(query)
                     session.total_queries += 1
 
-                    # Use specific DB or all
                     search_dbs = [db] if db in DATABASE_FUNCTIONS else databases
                     results = deep_search(
-                        query,
-                        databases=search_dbs,
+                        query, databases=search_dbs,
                         max_results_per_db=max_results_per_query,
                         year_from=year_from,
                     )
+
+                    # Filter out previously known findings
+                    results = self.memory.filter_new_findings(results)
+
                     cycle_findings.extend(results)
-                    logger.info(f"  Query '{query[:60]}...' ({db}): {len(results)} results")
+                    logger.info(f"  Query '{query[:60]}' ({db}): {len(results)} new results")
+
+                    # Record strategy effectiveness
+                    top_rel = max((r.get("citations", 0) for r in results), default=0)
+                    self.memory.record_strategy(query, db, len(results), min(top_rel / 100, 10))
 
                 session.add_findings(cycle_findings)
 
@@ -266,86 +341,152 @@ class ResearchOrchestrator:
                         if 0 <= idx < len(cycle_findings):
                             session.categorize_finding(cycle_findings[idx], eval_item)
 
-                    # Update top findings (sorted by combined score)
+                            # Add high-scoring but unresolved items as pending leads
+                            combined_score = eval_item.get("relevance", 0) + eval_item.get("novelty", 0)
+                            if combined_score >= 14 and eval_item.get("actionability", 0) < 5:
+                                self.memory.add_pending_lead(
+                                    cycle_findings[idx],
+                                    f"High relevance+novelty ({combined_score}/20) but low actionability"
+                                )
+
                     session.top_findings = sorted(
                         session.evaluated_findings,
                         key=lambda x: (x.get("relevance", 0) + x.get("novelty", 0) + x.get("actionability", 0)),
                         reverse=True,
                     )[:100]
 
-                # === Step 4: DEEP DIVE (citation chains for top papers) ===
+                # === Step 4: DEEP DIVE ===
                 if session.cycle % 2 == 0 and session.top_findings:
                     self._follow_citations(session, max_chains=3)
 
-                # === Step 5: EXTRACT full text from top findings ===
                 if session.cycle % 3 == 0:
                     self._extract_top_texts(session, max_extractions=5)
 
-                # === Step 6: CHECKPOINT ===
+                # === Step 5: TREND DETECTION ===
+                if cycle_findings and session.cycle % trends_every == 0:
+                    self.trend_detector.ingest_cycle(session.cycle, cycle_findings)
+                    trend_report = self.trend_detector.format_trends_for_report()
+                    session.trend_reports.append(trend_report)
+                    logger.info(f"Trend analysis:\n{trend_report[:200]}...")
+
+                # === Step 6: COLLABORATIVE INDEX (real-time) ===
+                if collaborative_collection and cycle_findings:
+                    self._index_findings_incremental(session, cycle_findings[:10], collaborative_collection)
+
+                # === Step 7: CHECKPOINT ===
                 if session.cycle % checkpoint_every == 0:
                     session.checkpoint()
 
-                # === Step 7: INTERMEDIATE SYNTHESIS ===
+                # === Step 8: INTERMEDIATE SYNTHESIS ===
                 if session.cycle % synthesis_every == 0:
                     report = self._generate_intermediate_report(agent, model_cfg, session)
                     session.intermediate_reports.append(report)
                     logger.info(f"Intermediate report generated ({len(report)} chars)")
 
+                # === Step 9: EMAIL MILESTONE ===
+                if milestone_every and session.cycle % milestone_every == 0:
+                    self.notifier.notify_milestone(session, f"Cycle {session.cycle}")
+
+                # Record cycle timing
+                cycle_duration = time.time() - cycle_start
+                session.cycle_timings.append({
+                    "cycle": session.cycle,
+                    "duration": round(cycle_duration, 1),
+                    "findings": len(cycle_findings),
+                    "queries": len(search_plan),
+                })
+                logger.info(f"Cycle {session.cycle} completed in {cycle_duration:.0f}s "
+                            f"({len(cycle_findings)} findings from {len(search_plan)} queries)")
+
                 self._publish_status(session, "running")
 
-                # Pace cycles
-                cycle_elapsed = time.time() - cycle_start
-                if cycle_elapsed < cycle_interval and not session.is_expired:
-                    wait = min(cycle_interval - cycle_elapsed, session.remaining_hours * 3600)
+                # === ADAPTIVE PAUSE ===
+                # Only pause if cycle was very fast (API cached, few results)
+                if cycle_duration < min_cycle_pause and not session.is_expired:
+                    wait = min(min_cycle_pause - cycle_duration, session.remaining_hours * 3600)
                     if wait > 0:
-                        logger.info(f"Waiting {wait:.0f}s before next cycle...")
+                        logger.info(f"Short cycle — pausing {wait:.0f}s before next cycle")
                         time.sleep(wait)
 
         except KeyboardInterrupt:
             logger.info("Research session interrupted by user")
 
-        # === FINAL REPORT ===
+        # === FINAL PHASE ===
         logger.info("\nGenerating final discovery report...")
+
+        # Final trend analysis
+        if self.trend_detector.findings_by_cycle:
+            final_trends = self.trend_detector.format_trends_for_report()
+            session.trend_reports.append(final_trends)
+
+        # Generate protocols for top actionable findings
+        if generate_protocols and session.top_findings:
+            logger.info("Generating lab protocols for top findings...")
+            proto_gen = ProtocolGenerator(self.tabby)
+            protocols = proto_gen.generate_protocols_batch(session.top_findings, model_cfg, max_protocols=5)
+            session.protocols = protocols
+
+        # Final report
         final_report = self._generate_final_report(agent, model_cfg, session)
         session.intermediate_reports.append(final_report)
 
-        # Index top findings if requested
+        # Index top findings
         if index_to_collection and session.top_findings:
             self._index_findings(session, index_to_collection)
+
+        # Remember findings for future sessions
+        self.memory.remember_findings(session.evaluated_findings, session.session_id)
+
+        # Record topic connections for knowledge graph
+        if session.trend_reports:
+            trends = self.trend_detector.detect_trends()
+            for ht in trends.get("hot_topics", [])[:5]:
+                for kw in ht["keywords"]:
+                    self.memory.add_topic_connection(topic, kw, "related_discovery", ht["heat_score"])
 
         # Save everything
         session.checkpoint()
         self._save_full_report(session, final_report)
         self._publish_status(session, "done")
 
+        # Send completion email
+        self.notifier.notify_session_complete(session)
+
         logger.info(f"\nResearch session complete:")
-        logger.info(f"  Duration: {session.elapsed_hours:.1f} hours")
-        logger.info(f"  Cycles: {session.cycle}")
+        logger.info(f"  Duration: {session.elapsed_hours:.1f} hours ({session.cycle} cycles)")
+        logger.info(f"  Avg cycle time: {session.avg_cycle_time:.0f}s")
         logger.info(f"  Queries: {session.total_queries}")
         logger.info(f"  Unique results: {session.total_results}")
-        logger.info(f"  Papers: {len(session.papers)}")
-        logger.info(f"  Products: {len(session.products)}")
-        logger.info(f"  Techniques: {len(session.techniques)}")
-        logger.info(f"  Opportunities: {len(session.opportunities)}")
-        logger.info(f"  Patents: {len(session.patents)}")
+        logger.info(f"  Papers: {len(session.papers)} | Products: {len(session.products)}")
+        logger.info(f"  Techniques: {len(session.techniques)} | Opportunities: {len(session.opportunities)}")
+        logger.info(f"  Patents: {len(session.patents)} | Protocols: {len(session.protocols)}")
 
         return session
 
-    def _plan_searches(self, agent: ResearcherAgent, model_cfg: dict, session: ResearchSession) -> list[dict]:
+    def _plan_searches(self, agent: ResearcherAgent, model_cfg: dict, session: ResearchSession, memory_context: str = "") -> list[dict]:
         """Use the LLM agent to plan search queries."""
         self.tabby.swap_model(model_cfg["name"], model_cfg["path"], model_cfg.get("max_seq_len", 8192))
 
         prompt = agent.build_search_planning_prompt(session.topic, session.search_history[-20:])
 
-        # Add context about what we've found so far
+        # Add context about current state
         context = ""
         if session.evaluated_findings:
             top5 = session.top_findings[:5]
             context = "\n\nTOP FINDINGS SO FAR:\n"
             for f in top5:
                 context += f"- [{f.get('category', 'paper')}] {f.get('title', 'N/A')} (relevance: {f.get('relevance', '?')}/10)\n"
-            context += f"\nStats: {len(session.papers)} papers, {len(session.products)} products, {len(session.techniques)} techniques, {len(session.patents)} patents"
+            context += (f"\nStats: {len(session.papers)} papers, {len(session.products)} products, "
+                        f"{len(session.techniques)} techniques, {len(session.patents)} patents")
             context += f"\nSearch history: {session.total_queries} queries across {session.cycle} cycles"
+
+        # Add trend context
+        if session.trend_reports:
+            context += f"\n\nLATEST TREND ANALYSIS:\n{session.trend_reports[-1][:500]}"
+
+        # Add memory context
+        if memory_context:
+            context += f"\n\nCROSS-SESSION MEMORY:\n{memory_context}"
 
         messages = [
             {"role": "system", "content": agent.build_system_prompt()},
@@ -355,9 +496,7 @@ class ResearchOrchestrator:
         raw = self.tabby.chat_completion(messages, temperature=0.8, max_tokens=2048)
         self.tabby.unload_model()
 
-        # Parse JSON response
         try:
-            # Find JSON array in response
             start = raw.find("[")
             end = raw.rfind("]") + 1
             if start >= 0 and end > start:
@@ -367,7 +506,6 @@ class ResearchOrchestrator:
         except json.JSONDecodeError:
             logger.warning("Failed to parse search plan JSON, extracting queries from text")
 
-        # Fallback: extract any quoted strings as queries
         import re
         queries = re.findall(r'"query":\s*"([^"]+)"', raw)
         return [{"query": q, "database": "semantic_scholar"} for q in queries[:8]]
@@ -404,7 +542,6 @@ class ResearchOrchestrator:
         """Follow citation chains for top papers."""
         for finding in session.top_findings[:max_chains]:
             url = finding.get("url", "")
-            # Extract Semantic Scholar paper ID
             if "semanticscholar.org" in url:
                 paper_id = url.rstrip("/").split("/")[-1]
             elif finding.get("doi"):
@@ -418,8 +555,9 @@ class ResearchOrchestrator:
 
             logger.info(f"  Following citations for: {finding.get('title', '')[:60]}...")
             citing = search_semantic_scholar_citations(paper_id, max_results=10)
+            citing = self.memory.filter_new_findings(citing)
             session.add_findings(citing)
-            logger.info(f"  Found {len(citing)} citing papers")
+            logger.info(f"  Found {len(citing)} new citing papers")
 
     def _extract_top_texts(self, session: ResearchSession, max_extractions: int = 5):
         """Extract full text from top-scoring findings."""
@@ -439,6 +577,27 @@ class ResearchOrchestrator:
                 extracted += 1
                 logger.info(f"  Extracted {len(text)} chars from: {finding.get('title', '')[:50]}...")
 
+    def _index_findings_incremental(self, session: ResearchSession, findings: list[dict], collection_name: str):
+        """Index findings in real-time for collaborative mode with analysis agents."""
+        chunks = []
+        for i, f in enumerate(findings):
+            text = f"{f.get('title', '')}\n\n{f.get('abstract', '')}"
+            if f.get("insight"):
+                text += f"\n\nKey insight: {f['insight']}"
+
+            chunks.append({
+                "text": text,
+                "chunk_id": f"live_{session.session_id}::c{session.cycle}_f{i}",
+                "source": f"research_live_{session.session_id}",
+                "source_path": f"research:{f.get('url', '')}",
+                "section": f.get("category", "paper"),
+                "metadata": {"format": ".research", "chunk_index": i},
+            })
+
+        if chunks:
+            self.indexer.index_chunks(chunks, collection_name=collection_name)
+            logger.info(f"  Live-indexed {len(chunks)} findings into '{collection_name}'")
+
     def _generate_intermediate_report(self, agent: ResearcherAgent, model_cfg: dict, session: ResearchSession) -> str:
         """Generate a progress report mid-session."""
         self.tabby.swap_model(model_cfg["name"], model_cfg["path"], model_cfg.get("max_seq_len", 8192))
@@ -453,15 +612,21 @@ class ResearchOrchestrator:
                 findings_text += f"\n    Excerpt: {f['full_text'][:300]}..."
             findings_text += "\n"
 
+        trend_section = ""
+        if session.trend_reports:
+            trend_section = f"\n\nTREND ANALYSIS:\n{session.trend_reports[-1][:500]}"
+
         prompt = f"""Generate an intermediate research report.
 
 TOPIC: {session.topic}
 SESSION: {session.elapsed_hours:.1f}h elapsed, {session.remaining_hours:.1f}h remaining
 STATS: {session.total_queries} queries, {session.total_results} results, {session.cycle} cycles
+PERFORMANCE: avg {session.avg_cycle_time:.0f}s/cycle
 CATEGORIES: {len(session.papers)} papers, {len(session.products)} products, {len(session.techniques)} techniques, {len(session.opportunities)} opportunities, {len(session.patents)} patents
 
 TOP FINDINGS:
 {findings_text}
+{trend_section}
 
 Provide:
 1. Summary of most important discoveries so far
@@ -482,7 +647,6 @@ Provide:
         """Generate the comprehensive final discovery report."""
         self.tabby.swap_model(model_cfg["name"], model_cfg["path"], model_cfg.get("max_seq_len", 16384))
 
-        # Build comprehensive summary
         sections = []
 
         if session.papers:
@@ -515,20 +679,21 @@ Provide:
             sections.append(f"INNOVATION OPPORTUNITIES ({len(session.opportunities)} total):\n{opp_text}")
 
         if session.patents:
-            pat_text = "\n".join(
-                f"- {p.get('title', 'N/A')} — {p.get('url', 'N/A')}"
-                for p in session.patents[:10]
-            )
+            pat_text = "\n".join(f"- {p.get('title', 'N/A')} — {p.get('url', 'N/A')}" for p in session.patents[:10])
             sections.append(f"PATENTS ({len(session.patents)} total):\n{pat_text}")
+
+        # Add trend analysis
+        if session.trend_reports:
+            sections.append(f"TREND ANALYSIS:\n{session.trend_reports[-1]}")
 
         all_sections = "\n\n".join(sections)
 
         prompt = f"""Generate a comprehensive FINAL DISCOVERY REPORT for the laboratory.
 
 RESEARCH TOPIC: {session.topic}
-SESSION DURATION: {session.elapsed_hours:.1f} hours
+SESSION DURATION: {session.elapsed_hours:.1f} hours ({session.cycle} cycles, avg {session.avg_cycle_time:.0f}s/cycle)
 TOTAL QUERIES: {session.total_queries} | TOTAL RESULTS: {session.total_results}
-CYCLES COMPLETED: {session.cycle}
+PROTOCOLS GENERATED: {len(session.protocols)}
 
 {all_sections}
 
@@ -543,8 +708,9 @@ Generate a structured report with:
 4. EMERGING TECHNIQUES — Methods the lab should consider adopting
 5. INNOVATION OPPORTUNITIES — Ideas for new experiments, products, or research directions
 6. COMPETITIVE LANDSCAPE — Who else is working in this space and what's their approach
-7. RECOMMENDATIONS — Prioritized action items (immediate / short-term / long-term)
-8. KNOWLEDGE GAPS — What we still don't know and how to find out
+7. TREND ANALYSIS — What's hot, what's cooling, what's emerging
+8. RECOMMENDATIONS — Prioritized action items (immediate / short-term / long-term)
+9. KNOWLEDGE GAPS — What we still don't know and how to find out
 
 Be specific and actionable. The lab director will use this to make investment and research decisions."""
 
@@ -573,10 +739,7 @@ Be specific and actionable. The lab director will use this to make investment an
                 "source": f"research_session_{session.session_id}",
                 "source_path": f"research:{f.get('url', '')}",
                 "section": f.get("category", "paper"),
-                "metadata": {
-                    "format": ".research",
-                    "chunk_index": i,
-                },
+                "metadata": {"format": ".research", "chunk_index": i},
             })
 
         if chunks:
@@ -584,7 +747,7 @@ Be specific and actionable. The lab director will use this to make investment an
             logger.info(f"Indexed {indexed} research findings into collection '{collection_name}'")
 
     def _save_full_report(self, session: ResearchSession, final_report: str):
-        """Save the complete research session as JSON and Markdown."""
+        """Save the complete research session as JSON, Markdown, and protocols."""
         output_dir = session.output_dir
         base = f"research_{session.session_id}"
 
@@ -597,9 +760,8 @@ Be specific and actionable. The lab director will use this to make investment an
             f"# Research Discovery Report",
             f"",
             f"**Topic:** {session.topic}",
-            f"**Duration:** {session.elapsed_hours:.1f} hours",
+            f"**Duration:** {session.elapsed_hours:.1f} hours ({session.cycle} cycles, avg {session.avg_cycle_time:.0f}s/cycle)",
             f"**Queries:** {session.total_queries} | **Results:** {session.total_results}",
-            f"**Cycles:** {session.cycle}",
             f"",
             f"## Summary",
             f"",
@@ -611,16 +773,28 @@ Be specific and actionable. The lab director will use this to make investment an
             f"| Opportunities | {len(session.opportunities)} |",
             f"| Patents | {len(session.patents)} |",
             f"| Competitors | {len(session.competitors)} |",
+            f"| Protocols | {len(session.protocols)} |",
             f"",
             f"---",
             f"",
             final_report,
             f"",
-            f"---",
-            f"",
-            f"## All Top Findings",
-            f"",
         ]
+
+        # Add trend report
+        if session.trend_reports:
+            md_lines.extend([
+                f"---",
+                f"",
+                f"## Trend Analysis",
+                f"",
+                f"```",
+                session.trend_reports[-1],
+                f"```",
+                f"",
+            ])
+
+        md_lines.extend([f"---", f"", f"## All Top Findings", f""])
 
         for i, f in enumerate(session.top_findings[:50], 1):
             score = f.get("relevance", 0) + f.get("novelty", 0) + f.get("actionability", 0)
@@ -642,7 +816,25 @@ Be specific and actionable. The lab director will use this to make investment an
         with open(output_dir / f"{base}.md", "w") as f:
             f.write("\n".join(md_lines))
 
-        logger.info(f"Reports saved: {output_dir / base}.json and .md")
+        # Save protocols separately
+        if session.protocols:
+            protocols_md = ProtocolGenerator.protocols_to_markdown(session.protocols)
+            with open(output_dir / f"{base}_protocols.md", "w") as f:
+                f.write(protocols_md)
+            logger.info(f"Protocols saved: {output_dir / base}_protocols.md")
+
+        # Generate PDF report
+        try:
+            from src.reports.pdf_report import generate_research_pdf
+            pdf_path = output_dir / f"{base}.pdf"
+            generate_research_pdf(session, pdf_path, final_report)
+            logger.info(f"PDF report saved: {pdf_path}")
+        except ImportError:
+            logger.warning("reportlab not installed — skipping PDF generation (pip install reportlab)")
+        except Exception as e:
+            logger.error(f"PDF generation failed: {e}")
+
+        logger.info(f"Reports saved: {output_dir / base}.json, .md, and .pdf")
 
     def _publish_status(self, session: ResearchSession, status: str):
         """Write live status for dashboard polling."""
@@ -656,6 +848,7 @@ Be specific and actionable. The lab director will use this to make investment an
             "elapsed_hours": round(session.elapsed_hours, 2),
             "remaining_hours": round(session.remaining_hours, 2),
             "cycle": session.cycle,
+            "avg_cycle_seconds": round(session.avg_cycle_time, 1),
             "total_queries": session.total_queries,
             "total_results": session.total_results,
             "papers": len(session.papers),
@@ -663,6 +856,7 @@ Be specific and actionable. The lab director will use this to make investment an
             "techniques": len(session.techniques),
             "opportunities": len(session.opportunities),
             "patents": len(session.patents),
+            "protocols": len(session.protocols),
             "updated_at": time.time(),
         }
         with open(status_path, "w") as f:

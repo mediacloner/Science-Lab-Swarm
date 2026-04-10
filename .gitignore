@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+*.env
+
+# Output (keep structure, ignore content)
+output/transcripts/*.json
+output/transcripts/*.md
+output/audio/*.mp3
+output/audio/*.json
+output/knowledge_base/*.db
+output/.live_*.json
+
+# Models (too large for git)
+models/
+
+# ChromaDB
+chroma_db/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TabbyAPI submodule models
+tabbyAPI/models/

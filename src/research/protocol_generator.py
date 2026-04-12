@@ -70,11 +70,11 @@ class ProtocolGenerator:
             full_text_section = f"FULL TEXT EXCERPT:\n{finding['full_text'][:3000]}"
 
         prompt = PROTOCOL_PROMPT.format(
-            title=finding.get("title", "N/A"),
-            category=finding.get("category", "paper"),
-            abstract=finding.get("abstract", "N/A")[:1000],
-            insight=finding.get("insight", "N/A"),
-            next_step=finding.get("next_step", "N/A"),
+            title=finding.get("title") or "N/A",
+            category=finding.get("category") or "paper",
+            abstract=(finding.get("abstract") or "N/A")[:1000],
+            insight=finding.get("insight") or "N/A",
+            next_step=finding.get("next_step") or "N/A",
             full_text_section=full_text_section,
         )
 
@@ -115,7 +115,7 @@ class ProtocolGenerator:
             if finding.get("actionability", 0) < 5:
                 continue  # Skip low-actionability findings
 
-            logger.info(f"Generating protocol for: {finding.get('title', 'N/A')[:60]}...")
+            logger.info(f"Generating protocol for: {(finding.get('title') or 'N/A')[:60]}...")
             protocol = self.generate_protocol(finding, model_cfg)
             protocols.append(protocol)
 

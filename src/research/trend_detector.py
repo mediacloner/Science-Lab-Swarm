@@ -229,7 +229,7 @@ class TrendDetector:
 
     def _keywords_from_finding(self, finding: dict) -> list[str]:
         """Extract significant keywords from a single finding's title and abstract."""
-        text = f"{finding.get('title', '')} {finding.get('abstract', '')[:200]}".lower()
+        text = f"{finding.get('title') or ''} {(finding.get('abstract') or '')[:200]}".lower()
 
         # Simple keyword extraction: split, filter stopwords and short words
         words = text.split()
@@ -269,7 +269,7 @@ class TrendDetector:
         if trends["citation_velocity"]:
             parts.append("\nFAST-GROWING PAPERS (high citation velocity):")
             for p in trends["citation_velocity"][:5]:
-                parts.append(f"  - {p.get('title', 'N/A')[:60]}... "
+                parts.append(f"  - {(p.get('title') or 'N/A')[:60]}... "
                              f"({p['citation_velocity']} cit/yr, age={p['age_years']}yr)")
 
         if trends["publication_bursts"]:

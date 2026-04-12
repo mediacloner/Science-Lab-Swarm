@@ -20,11 +20,12 @@ env/
 # Output (keep structure, ignore content)
 output/transcripts/*.json
 output/transcripts/*.md
+output/transcripts/*.pdf
 output/audio/*.mp3
 output/audio/*.json
-output/knowledge_base/*.db
-output/knowledge_base/chroma*/
+output/knowledge_base/
 output/.live_*.json
+output/.proc_*.log
 output/research/*.json
 output/research/*.md
 output/research/*.pdf
@@ -42,5 +43,5 @@ chroma_db/
 .DS_Store
 Thumbs.db
 
-# TabbyAPI submodule models
-tabbyAPI/models/
+# TabbyAPI (symlink to shared install)
+tabbyAPI/

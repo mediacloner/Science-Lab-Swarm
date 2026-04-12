@@ -39,8 +39,7 @@ class TabbyClient:
         self.unload_model()
 
         payload = {
-            "name": name,
-            "model_path": path,
+            "model_name": name,
             "max_seq_len": max_seq_len,
         }
         r = requests.post(

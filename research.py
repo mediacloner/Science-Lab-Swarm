@@ -57,6 +57,8 @@ Examples:
                         help="Real-time collaborative mode — index findings immediately for analysis agents")
     parser.add_argument("--year-from", type=int, default=None, help="Only include papers from this year onwards")
     parser.add_argument("--no-protocols", action="store_true", help="Skip protocol generation")
+    parser.add_argument("--reference", default=None, metavar="COLLECTION",
+                        help="ChromaDB collection to use as background reference documents")
     parser.add_argument("--config", default="config/settings.yaml", help="Config file path")
     parser.add_argument("--check", action="store_true", help="Check TabbyAPI connectivity and exit")
     args = parser.parse_args()
@@ -99,6 +101,8 @@ Examples:
         print(f"  Index to:      {args.index_to}")
     if args.collaborative:
         print(f"  Collaborative: {args.collaborative} (real-time indexing)")
+    if args.reference:
+        print(f"  Reference:     {args.reference} (background docs)")
     print(f"  Cycle timing:  adaptive (no fixed interval)")
     print(f"\n  {memory_summary}")
     print(f"{'='*60}\n")
@@ -112,6 +116,7 @@ Examples:
             index_to_collection=args.index_to,
             generate_protocols=not args.no_protocols,
             collaborative_collection=args.collaborative,
+            reference_collection=args.reference,
         )
 
         print(f"\n{'='*60}")

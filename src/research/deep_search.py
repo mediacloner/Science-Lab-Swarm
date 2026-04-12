@@ -45,7 +45,7 @@ class RateLimiter:
     def __init__(self):
         self._last_call: dict[str, float] = {}
         self._min_intervals = {
-            "semantic_scholar": 1.0,    # 100 req/5min ≈ 1/s is safe
+            "semantic_scholar": 4.0,    # Unauthenticated: conservative to avoid 429s
             "arxiv": 3.0,               # Be polite to arXiv
             "pubmed": 0.4,              # 3 req/s with API key, conservative without
             "crossref": 1.0,
@@ -87,31 +87,44 @@ def search_semantic_scholar(query: str, max_results: int = 20, year_from: int = 
     if year_from:
         params["year"] = f"{year_from}-"
 
-    try:
-        r = requests.get(url, params=params, timeout=15)
-        r.raise_for_status()
-        data = r.json()
-        results = []
-        for paper in data.get("data", []):
-            results.append({
-                "title": paper.get("title", ""),
-                "abstract": paper.get("abstract", ""),
-                "year": paper.get("year"),
-                "publication_date": paper.get("publicationDate", ""),
-                "authors": [a.get("name", "") for a in paper.get("authors", [])],
-                "citations": paper.get("citationCount", 0),
-                "influential_citations": paper.get("influentialCitationCount", 0),
-                "journal": (paper.get("journal") or {}).get("name", ""),
-                "url": paper.get("url", ""),
-                "doi": (paper.get("externalIds") or {}).get("DOI", ""),
-                "source": "semantic_scholar",
-                "type": "paper",
-            })
-        _cache.put(query, "semantic_scholar", results)
-        return results
-    except Exception as e:
-        logger.warning(f"Semantic Scholar search failed: {e}")
-        return []
+    for attempt in range(3):
+        try:
+            r = requests.get(url, params=params, timeout=15)
+            if r.status_code == 429:
+                wait = 5 * (attempt + 1)
+                logger.info(f"Semantic Scholar rate limited, waiting {wait}s (attempt {attempt + 1}/3)")
+                time.sleep(wait)
+                continue
+            r.raise_for_status()
+            data = r.json()
+            results = []
+            for paper in data.get("data", []):
+                results.append({
+                    "title": paper.get("title", ""),
+                    "abstract": paper.get("abstract", ""),
+                    "year": paper.get("year"),
+                    "publication_date": paper.get("publicationDate", ""),
+                    "authors": [a.get("name", "") for a in paper.get("authors", [])],
+                    "citations": paper.get("citationCount", 0),
+                    "influential_citations": paper.get("influentialCitationCount", 0),
+                    "journal": (paper.get("journal") or {}).get("name", ""),
+                    "url": paper.get("url", ""),
+                    "doi": (paper.get("externalIds") or {}).get("DOI", ""),
+                    "source": "semantic_scholar",
+                    "type": "paper",
+                })
+            _cache.put(query, "semantic_scholar", results)
+            return results
+        except requests.exceptions.HTTPError as e:
+            if "429" in str(e) and attempt < 2:
+                time.sleep(5 * (attempt + 1))
+                continue
+            logger.warning(f"Semantic Scholar search failed: {e}")
+            return []
+        except Exception as e:
+            logger.warning(f"Semantic Scholar search failed: {e}")
+            return []
+    return []
 
 
 def search_semantic_scholar_citations(paper_id: str, max_results: int = 20) -> list[dict]:
@@ -308,7 +321,7 @@ def search_google_patents(query: str, max_results: int = 10) -> list[dict]:
     """Search Google Patents via SerpAPI-style scraping (DuckDuckGo fallback)."""
     _limiter.wait("google_patents")
     try:
-        from duckduckgo_search import DDGS
+        from ddgs import DDGS
         ddg = DDGS()
         search_query = f"site:patents.google.com {query}"
         results_raw = ddg.text(search_query, max_results=max_results)
@@ -338,7 +351,7 @@ def search_suppliers(query: str, max_results: int = 10) -> list[dict]:
         "abcam.com", "neb.com", "idtdna.com", "addgene.org",
     ]
     try:
-        from duckduckgo_search import DDGS
+        from ddgs import DDGS
         ddg = DDGS()
         # Search across major suppliers
         site_filter = " OR ".join(f"site:{s}" for s in supplier_sites)
@@ -366,7 +379,7 @@ def search_preprint_servers(query: str, max_results: int = 10) -> list[dict]:
     """Search bioRxiv and medRxiv via their API."""
     _limiter.wait("duckduckgo")
     try:
-        from duckduckgo_search import DDGS
+        from ddgs import DDGS
         ddg = DDGS()
         search_query = f"(site:biorxiv.org OR site:medrxiv.org OR site:chemrxiv.org) {query}"
         results_raw = ddg.text(search_query, max_results=max_results)
@@ -392,7 +405,7 @@ def search_duckduckgo_general(query: str, max_results: int = 10) -> list[dict]:
     """General web search for scientific news, blog posts, press releases."""
     _limiter.wait("duckduckgo")
     try:
-        from duckduckgo_search import DDGS
+        from ddgs import DDGS
         ddg = DDGS()
         results_raw = ddg.text(query, max_results=max_results)
         results = []

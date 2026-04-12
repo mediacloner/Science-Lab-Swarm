@@ -3,85 +3,804 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Science Lab Swarm — Dashboard</title>
+    <title>Science Lab Swarm</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&display=swap" rel="stylesheet">
     <style>
+        /* ================================================================
+           Scientific Professional Theme
+           Clean, academic journal aesthetic — warm whites, deep blues,
+           serif body text, sans-serif labels.
+           ================================================================ */
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace; background: #0d1117; color: #c9d1d9; }
-        .header { background: #161b22; border-bottom: 1px solid #30363d; padding: 16px 24px; display: flex; align-items: center; gap: 16px; }
-        .header h1 { font-size: 20px; color: #58a6ff; }
-        .header .status { font-size: 13px; padding: 4px 12px; border-radius: 12px; }
-        .status.active { background: #1f6feb33; color: #58a6ff; }
-        .status.idle { background: #30363d; color: #8b949e; }
-        .tabs { display: flex; gap: 0; background: #161b22; border-bottom: 1px solid #30363d; padding: 0 24px; }
-        .tab { padding: 12px 20px; cursor: pointer; color: #8b949e; border-bottom: 2px solid transparent; font-size: 14px; }
-        .tab:hover { color: #c9d1d9; }
-        .tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
-        .content { max-width: 1200px; margin: 24px auto; padding: 0 24px; }
+
+        body {
+            font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+            font-size: 15px;
+            line-height: 1.65;
+            background: #fafaf8;
+            color: #2c2c2c;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility;
+        }
+
+        /* -- Header --------------------------------------------------- */
+        .header {
+            background: #ffffff;
+            border-bottom: 3px solid #1a5276;
+            padding: 18px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header-left { display: flex; align-items: baseline; gap: 14px; }
+        .header h1 {
+            font-family: "Source Serif 4", Georgia, serif;
+            font-size: 24px;
+            font-weight: 700;
+            color: #1a5276;
+            letter-spacing: -0.2px;
+        }
+        .header-subtitle {
+            font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            color: #888;
+            font-weight: 400;
+            letter-spacing: 0.2px;
+        }
+        .status {
+            font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 5px 14px;
+            border-radius: 3px;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+        }
+        .status.active { background: #d4efdf; color: #1e8449; }
+        .status.idle   { background: #f0efeb; color: #6b6b6b; }
+
+        /* -- Tab navigation ------------------------------------------- */
+        .tabs {
+            display: flex;
+            gap: 0;
+            background: #ffffff;
+            border-bottom: 1px solid #e0ddd5;
+            padding: 0 32px;
+        }
+        .tab {
+            font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            padding: 12px 22px;
+            cursor: pointer;
+            color: #6b6b6b;
+            border-bottom: 2px solid transparent;
+            font-size: 13px;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+            transition: color 0.15s, border-color 0.15s;
+        }
+        .tab:hover { color: #2c2c2c; }
+        .tab.active { color: #1a5276; border-bottom-color: #1a5276; }
+
+        /* -- Content area --------------------------------------------- */
+        .content { max-width: 1100px; margin: 28px auto; padding: 0 28px; }
         .panel { display: none; }
         .panel.active { display: block; }
-        .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
-        .card h2 { font-size: 16px; color: #f0f6fc; margin-bottom: 12px; }
-        .card h3 { font-size: 14px; color: #8b949e; margin: 12px 0 8px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
-        .stat { text-align: center; padding: 16px; background: #0d1117; border-radius: 6px; }
-        .stat .value { font-size: 28px; font-weight: bold; color: #58a6ff; }
-        .stat .label { font-size: 12px; color: #8b949e; margin-top: 4px; }
-        .progress-bar { background: #21262d; border-radius: 4px; height: 8px; margin-top: 12px; overflow: hidden; }
-        .progress-bar .fill { height: 100%; background: #238636; border-radius: 4px; transition: width 1s; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #21262d; }
-        th { color: #8b949e; font-weight: 600; }
-        tr:hover { background: #161b2233; }
-        .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
-        .badge.paper { background: #1f6feb33; color: #58a6ff; }
-        .badge.product { background: #23863633; color: #3fb950; }
-        .badge.technique { background: #a371f733; color: #bc8cff; }
-        .badge.opportunity { background: #d2992233; color: #d29922; }
-        .badge.patent { background: #f8514933; color: #f85149; }
-        .badge.competitor { background: #8b949e33; color: #8b949e; }
-        .finding-item { padding: 12px 0; border-bottom: 1px solid #21262d; }
+
+        /* -- Cards ---------------------------------------------------- */
+        .card {
+            background: #ffffff;
+            border: 1px solid #e0ddd5;
+            border-radius: 4px;
+            padding: 24px 28px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .card h2 {
+            font-family: "Source Serif 4", Georgia, serif;
+            font-size: 18px;
+            font-weight: 700;
+            color: #1a5276;
+            letter-spacing: -0.2px;
+            margin-bottom: 6px;
+            border-bottom: 1px solid #f0efeb;
+            padding-bottom: 10px;
+        }
+        .card-description {
+            font-size: 14px;
+            color: #6b6b6b;
+            font-style: italic;
+            margin-bottom: 18px;
+            line-height: 1.5;
+        }
+
+        /* -- Stats grid ----------------------------------------------- */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 12px;
+        }
+        .stat {
+            text-align: center;
+            padding: 14px 10px;
+            background: #f8f7f4;
+            border: 1px solid #eceae3;
+            border-radius: 4px;
+        }
+        .stat .value {
+            font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 28px;
+            font-weight: 700;
+            color: #1a5276;
+            letter-spacing: -0.5px;
+        }
+        .stat .label {
+            font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 10.5px;
+            font-weight: 500;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-top: 5px;
+        }
+
+        /* -- Progress bar --------------------------------------------- */
+        .progress-bar {
+            background: #eceae3;
+            border-radius: 3px;
+            height: 8px;
+            margin-top: 12px;
+            overflow: hidden;
+        }
+        .progress-bar .fill {
+            height: 100%;
+            background: #1a5276;
+            border-radius: 3px;
+            transition: width 1s;
+        }
+
+        /* -- Tables --------------------------------------------------- */
+        table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+        th, td {
+            font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            padding: 11px 14px;
+            text-align: left;
+            border-bottom: 1px solid #eceae3;
+        }
+        th {
+            background: #f5f4f0;
+            color: #888;
+            font-weight: 600;
+            font-size: 10.5px;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+        }
+        tr:hover { background: #faf9f6; }
+
+        /* -- Badges --------------------------------------------------- */
+        .badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 3px;
+            font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+        .badge.paper      { background: #d6eaf8; color: #1a5276; }
+        .badge.product     { background: #d5f5e3; color: #1e8449; }
+        .badge.technique   { background: #e8daef; color: #6c3483; }
+        .badge.opportunity { background: #fdebd0; color: #7d6608; }
+        .badge.patent      { background: #fadbd8; color: #922b21; }
+        .badge.competitor  { background: #f0efeb; color: #6b6b6b; }
+
+        /* -- Findings ------------------------------------------------- */
+        .finding-item { padding: 12px 0; border-bottom: 1px solid #eceae3; }
         .finding-item:last-child { border-bottom: none; }
-        .finding-title { font-weight: 600; color: #c9d1d9; margin-bottom: 4px; }
-        .finding-meta { font-size: 12px; color: #8b949e; }
-        .finding-insight { font-size: 13px; color: #a5d6ff; margin-top: 4px; }
-        .score-bar { display: inline-block; width: 60px; height: 6px; background: #21262d; border-radius: 3px; margin-right: 8px; vertical-align: middle; }
+        .finding-title { font-weight: 700; color: #2c2c2c; margin-bottom: 4px; letter-spacing: -0.1px; }
+        .finding-meta { font-size: 12px; color: #888; font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif; }
+        .finding-insight { font-size: 13.5px; color: #1a5276; margin-top: 5px; font-style: italic; line-height: 1.55; }
+
+        /* -- Score bars ----------------------------------------------- */
+        .score-bar {
+            display: inline-block;
+            width: 60px;
+            height: 6px;
+            background: #eceae3;
+            border-radius: 3px;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
         .score-bar .fill { height: 100%; border-radius: 3px; }
-        a { color: #58a6ff; text-decoration: none; }
+
+        /* -- Links ---------------------------------------------------- */
+        a { color: #2980b9; text-decoration: none; }
         a:hover { text-decoration: underline; }
-        .cycle-log { max-height: 300px; overflow-y: auto; font-size: 12px; font-family: monospace; background: #0d1117; padding: 12px; border-radius: 6px; }
-        .cycle-log .entry { padding: 4px 0; border-bottom: 1px solid #161b22; }
-        .empty { text-align: center; padding: 40px; color: #484f58; }
+
+        /* -- Empty state ---------------------------------------------- */
+        .empty {
+            text-align: center;
+            padding: 36px;
+            color: #999;
+            font-style: italic;
+        }
+
+        /* -- Cycle log ------------------------------------------------ */
+        .cycle-log {
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 12px;
+            font-family: "JetBrains Mono", "Fira Code", "Courier New", monospace;
+            background: #f8f7f4;
+            border: 1px solid #eceae3;
+            padding: 12px;
+            border-radius: 4px;
+        }
+        .cycle-log .entry { padding: 4px 0; border-bottom: 1px solid #f0efeb; }
+
+        /* ================================================================
+           Forms — Launch Tab
+           ================================================================ */
+
+        .launch-form { max-width: 780px; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label {
+            display: block;
+            font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 11.5px;
+            font-weight: 600;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+            margin-bottom: 6px;
+        }
+        .form-group input[type="text"],
+        .form-group input[type="number"],
+        .form-group select {
+            width: 100%;
+            padding: 10px 13px;
+            font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 14px;
+            font-weight: 400;
+            color: #2c2c2c;
+            border: 1px solid #d0cdc5;
+            border-radius: 4px;
+            background: #ffffff;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #2980b9;
+            box-shadow: 0 0 0 3px rgba(41,128,185,0.1);
+        }
+        .form-group input::placeholder { color: #b0aba0; font-weight: 400; }
+
+        .form-row {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .form-row .form-group { flex: 1; min-width: 160px; }
+
+        .checkbox-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 6px 16px;
+            margin-top: 4px;
+        }
+        .checkbox-label {
+            font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            color: #2c2c2c;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+        .checkbox-label input[type="checkbox"] {
+            accent-color: #1a5276;
+        }
+        .checkbox-inline {
+            display: flex;
+            align-items: center;
+            padding-top: 22px;
+        }
+        .checkbox-inline label {
+            text-transform: none;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+
+        /* -- Buttons -------------------------------------------------- */
+        .btn-primary {
+            font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            padding: 11px 28px;
+            background: #1a5276;
+            color: #ffffff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s, box-shadow 0.2s;
+            margin-top: 8px;
+        }
+        .btn-primary:hover { background: #154360; box-shadow: 0 2px 6px rgba(26,82,118,0.25); }
+        .btn-primary:disabled { background: #a0b4c4; cursor: not-allowed; box-shadow: none; }
+
+        .btn-danger {
+            font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 5px 14px;
+            background: #922b21;
+            color: #ffffff;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .btn-danger:hover { background: #7b241c; }
+
+        /* -- Process list --------------------------------------------- */
+        .process-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            background: #f8f7f4;
+            border: 1px solid #eceae3;
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+        .process-info {
+            font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 13px;
+        }
+        .process-type {
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.4px;
+            color: #1a5276;
+        }
+        .process-topic { color: #2c2c2c; margin-left: 8px; }
+        .process-elapsed { color: #6b6b6b; font-size: 12px; margin-left: 12px; }
+        .process-done { color: #27703a; font-size: 12px; font-weight: 600; }
+        .process-failed { color: #922b21; font-size: 12px; font-weight: 600; }
+
+        /* -- Toast notifications -------------------------------------- */
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 14px;
+            padding: 12px 24px;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+            animation: fadeInOut 4.5s ease-in-out forwards;
+        }
+        .toast-success { background: #d4efdf; color: #1e8449; border: 1px solid #a9dfbf; }
+        .toast-error   { background: #fadbd8; color: #922b21; border: 1px solid #f5b7b1; }
+
+        @keyframes fadeInOut {
+            0%   { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+            8%   { opacity: 1; transform: translateX(-50%) translateY(0); }
+            80%  { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        /* -- Section dividers ----------------------------------------- */
+        .section-divider {
+            border: none;
+            border-top: 1px solid #eceae3;
+            margin: 24px 0;
+        }
+
+        /* -- Folder picker -------------------------------------------- */
+        .path-input-row {
+            display: flex;
+            gap: 8px;
+            align-items: stretch;
+        }
+        .path-input-row input[type="text"] { flex: 1; }
+        .btn-browse {
+            font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            padding: 9px 16px;
+            background: #f5f4f0;
+            color: #2c2c2c;
+            border: 1px solid #d0cdc5;
+            border-radius: 3px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.15s;
+        }
+        .btn-browse:hover { background: #eceae3; }
+
+        .picker-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.35);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+        .picker-overlay.open { display: flex; }
+        .picker-box {
+            background: #ffffff;
+            border: 1px solid #d0cdc5;
+            border-radius: 6px;
+            width: 560px;
+            max-width: 92vw;
+            max-height: 75vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+        }
+        .picker-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 18px;
+            border-bottom: 1px solid #eceae3;
+        }
+        .picker-header h3 {
+            font-family: "Source Serif 4", Georgia, serif;
+            font-size: 16px;
+            font-weight: 700;
+            color: #1a5276;
+        }
+        .picker-path {
+            font-family: "JetBrains Mono", "Fira Code", "Courier New", monospace;
+            font-size: 12px;
+            color: #6b6b6b;
+            padding: 8px 18px;
+            background: #f8f7f4;
+            border-bottom: 1px solid #eceae3;
+            word-break: break-all;
+        }
+        .picker-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px 0;
+        }
+        .picker-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 18px;
+            font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            color: #2c2c2c;
+            cursor: pointer;
+            transition: background 0.1s;
+        }
+        .picker-item:hover { background: #f5f4f0; }
+        .picker-item.dir { font-weight: 600; }
+        .picker-item.file { color: #6b6b6b; }
+        .picker-icon {
+            width: 18px;
+            text-align: center;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+        .picker-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 18px;
+            border-top: 1px solid #eceae3;
+            gap: 10px;
+        }
+        .picker-footer .btn-primary { margin-top: 0; }
+        .picker-footer .btn-cancel {
+            font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 10px 20px;
+            background: transparent;
+            color: #6b6b6b;
+            border: 1px solid #d0cdc5;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .picker-footer .btn-cancel:hover { background: #f5f4f0; }
+        .picker-empty {
+            text-align: center;
+            padding: 28px;
+            color: #999;
+            font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-style: italic;
+            font-size: 13px;
+        }
+
+        /* -- Responsive ----------------------------------------------- */
+        @media (max-width: 640px) {
+            .header { padding: 14px 16px; }
+            .header-subtitle { display: none; }
+            .tabs { padding: 0 8px; overflow-x: auto; }
+            .tab { padding: 10px 14px; font-size: 12px; white-space: nowrap; }
+            .content { padding: 0 12px; }
+            .card { padding: 16px; }
+            .form-row { flex-direction: column; gap: 0; }
+            .checkbox-inline { padding-top: 0; }
+        }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>Science Lab Swarm</h1>
+        <div class="header-left">
+            <h1>Science Lab Swarm</h1>
+            <span class="header-subtitle">Research Intelligence Dashboard</span>
+        </div>
         <span id="globalStatus" class="status idle">Idle</span>
     </div>
 
     <div class="tabs">
-        <div class="tab active" data-panel="research">Research Agent</div>
+        <div class="tab active" data-panel="launch">Launch Session</div>
+        <div class="tab" data-panel="research">Research</div>
         <div class="tab" data-panel="analysis">Analysis</div>
         <div class="tab" data-panel="sessions">Past Sessions</div>
         <div class="tab" data-panel="memory">Memory</div>
         <div class="tab" data-panel="collections">Collections</div>
+        <div class="tab" data-panel="system">System</div>
     </div>
 
     <div class="content">
-        <!-- RESEARCH PANEL -->
-        <div id="research" class="panel active">
+        <!-- ============================================================
+             LAUNCH PANEL
+             ============================================================ -->
+        <div id="launch" class="panel active">
+
+            <!-- Running Processes -->
+            <div class="card" id="processesCard" style="display:none">
+                <h2>Running Processes</h2>
+                <div id="processesContent"></div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="card">
+                <h2>Quick Actions</h2>
+                <p class="card-description">One-click shortcuts for common workflows. Enter a topic and pick an action.</p>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:end">
+                    <div class="form-group" style="flex:1;min-width:250px;margin-bottom:0">
+                        <label for="quick-topic">Topic</label>
+                        <input type="text" id="quick-topic" placeholder="Enter topic for quick action">
+                    </div>
+                    <button class="btn-primary" onclick="quickTest()" style="margin-top:0">Quick Test (1 round)</button>
+                    <button class="btn-primary" onclick="quickResearch()" style="margin-top:0;background:#27703a">Quick Research 30m</button>
+                </div>
+            </div>
+
+            <hr class="section-divider">
+
+            <!-- Full Analysis Pipeline -->
+            <div class="card">
+                <h2>Full Analysis Pipeline</h2>
+                <p class="card-description">
+                    Complete workflow: ingest documents from a path, then run multi-agent
+                    peer review. Leave the document path blank to analyze an existing collection.
+                </p>
+                <form id="fullAnalysisForm" class="launch-form">
+                    <div class="form-group">
+                        <label for="fa-topic">Research Topic *</label>
+                        <input type="text" id="fa-topic" name="topic" required
+                               placeholder="e.g., Effect of temperature on enzyme stability">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="fa-path">Document Path (optional)</label>
+                            <div class="path-input-row">
+                                <input type="text" id="fa-path" name="input_path"
+                                       placeholder="Leave blank to skip ingestion">
+                                <button type="button" class="btn-browse" onclick="openPicker('fa-path')">Browse</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="fa-collection">Collection Name</label>
+                            <input type="text" id="fa-collection" name="collection" value="lab_documents">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="fa-rounds">Max Rounds</label>
+                            <input type="number" id="fa-rounds" name="rounds" value="6" min="1" max="20">
+                        </div>
+                        <div class="form-group">
+                            <label for="fa-time-limit">Time Limit (min)</label>
+                            <input type="number" id="fa-time-limit" name="time_limit" value="30" min="1" max="120">
+                        </div>
+                        <div class="form-group checkbox-inline">
+                            <label><input type="checkbox" id="fa-recursive" name="recursive"> Recursive scan</label>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-primary" id="fa-submit">Run Full Analysis</button>
+                </form>
+            </div>
+
+            <hr class="section-divider">
+
+            <!-- Research Session Form -->
+            <div class="card">
+                <h2>Research Session</h2>
+                <p class="card-description">
+                    Launch an autonomous multi-database research session. The agent searches
+                    across scientific databases, evaluates findings, detects trends, and
+                    generates lab protocols.
+                </p>
+                <form id="researchForm" class="launch-form">
+                    <div class="form-group">
+                        <label for="r-topic">Research Topic *</label>
+                        <input type="text" id="r-topic" name="topic" required
+                               placeholder="e.g., CRISPR delivery methods for in vivo gene editing">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="r-hours">Duration (hours)</label>
+                            <input type="number" id="r-hours" name="hours" value="2" min="0.25" max="24" step="0.25">
+                        </div>
+                        <div class="form-group">
+                            <label for="r-persona">Researcher Persona</label>
+                            <select id="r-persona" name="persona">
+                                <option value="">Default (Scout)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="r-year-from">Papers From Year</label>
+                            <input type="number" id="r-year-from" name="year_from" placeholder="e.g., 2023" min="1900" max="2030">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Databases</label>
+                        <div id="r-databases" class="checkbox-grid">
+                            <span style="color:#999;font-style:italic;font-size:13px">Loading...</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="r-reference">Reference Documents (background context)</label>
+                        <select id="r-reference" name="reference_collection">
+                            <option value="">None — search only</option>
+                        </select>
+                        <small style="color:#999;display:block;margin-top:4px">
+                            Select an ingested collection to give the research agent background knowledge from your documents.
+                        </small>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="r-index-to">Index Findings to Collection</label>
+                            <input type="text" id="r-index-to" name="index_to" placeholder="Optional collection name">
+                        </div>
+                        <div class="form-group">
+                            <label for="r-collaborative">Collaborative Collection</label>
+                            <input type="text" id="r-collaborative" name="collaborative" placeholder="Optional — real-time indexing">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group checkbox-inline">
+                            <label><input type="checkbox" id="r-no-protocols" name="no_protocols"> Skip protocol generation</label>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-primary" id="r-submit">Start Research Session</button>
+                </form>
+            </div>
+
+            <hr class="section-divider">
+
+            <!-- Analysis Session Form -->
+            <div class="card">
+                <h2>Analysis Session</h2>
+                <p class="card-description">
+                    Run a multi-agent peer review on documents in your knowledge base.
+                    Three AI personas (PI, Reviewer, Methodologist) debate and synthesize findings.
+                </p>
+                <form id="analysisForm" class="launch-form">
+                    <div class="form-group">
+                        <label for="a-topic">Analysis Topic *</label>
+                        <input type="text" id="a-topic" name="topic" required
+                               placeholder="e.g., Effect of temperature on enzyme stability">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="a-collection">Document Collection</label>
+                            <input type="text" id="a-collection" name="collection" value="lab_documents">
+                        </div>
+                        <div class="form-group">
+                            <label for="a-rounds">Max Rounds</label>
+                            <input type="number" id="a-rounds" name="rounds" value="6" min="1" max="20">
+                        </div>
+                        <div class="form-group">
+                            <label for="a-time-limit">Time Limit (min)</label>
+                            <input type="number" id="a-time-limit" name="time_limit" value="30" min="1" max="120">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="a-pi">PI Persona</label>
+                            <select id="a-pi" name="pi_persona">
+                                <option value="">Default</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="a-reviewer">Reviewer Persona</label>
+                            <select id="a-reviewer" name="reviewer_persona">
+                                <option value="">Default</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="a-methodologist">Methodologist Persona</label>
+                            <select id="a-methodologist" name="methodologist_persona">
+                                <option value="">Default</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-primary" id="a-submit">Start Analysis</button>
+                </form>
+            </div>
+
+            <hr class="section-divider">
+
+            <!-- Document Ingestion Form -->
+            <div class="card">
+                <h2>Document Ingestion</h2>
+                <p class="card-description">
+                    Add documents to the knowledge base for analysis.
+                    Specify a file or directory path on the server.
+                </p>
+                <form id="ingestForm" class="launch-form">
+                    <div class="form-group">
+                        <label for="i-path">Document Path *</label>
+                        <div class="path-input-row">
+                            <input type="text" id="i-path" name="input_path" required
+                                   placeholder="Select a folder or file">
+                            <button type="button" class="btn-browse" onclick="openPicker('i-path')">Browse</button>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="i-collection">Collection Name</label>
+                            <input type="text" id="i-collection" name="collection" value="lab_documents">
+                        </div>
+                        <div class="form-group checkbox-inline">
+                            <label><input type="checkbox" id="i-recursive" name="recursive"> Recursive directory scan</label>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-primary" id="i-submit">Ingest Documents</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             RESEARCH PANEL
+             ============================================================ -->
+        <div id="research" class="panel">
             <div class="card" id="researchLive">
                 <h2>Live Research Session</h2>
                 <div id="researchContent" class="empty">No active research session</div>
             </div>
-
             <div class="card">
                 <h2>Top Findings</h2>
                 <div id="topFindings" class="empty">Waiting for findings...</div>
             </div>
         </div>
 
-        <!-- ANALYSIS PANEL -->
+        <!-- ============================================================
+             ANALYSIS PANEL
+             ============================================================ -->
         <div id="analysis" class="panel">
             <div class="card">
                 <h2>Live Analysis</h2>
@@ -89,15 +808,23 @@
             </div>
         </div>
 
-        <!-- PAST SESSIONS PANEL -->
+        <!-- ============================================================
+             PAST SESSIONS PANEL
+             ============================================================ -->
         <div id="sessions" class="panel">
             <div class="card">
                 <h2>Completed Research Sessions</h2>
                 <div id="sessionsContent" class="empty">Loading...</div>
             </div>
+            <div class="card">
+                <h2>Completed Analysis Transcripts</h2>
+                <div id="transcriptsContent" class="empty">Loading...</div>
+            </div>
         </div>
 
-        <!-- MEMORY PANEL -->
+        <!-- ============================================================
+             MEMORY PANEL
+             ============================================================ -->
         <div id="memory" class="panel">
             <div class="card">
                 <h2>Cross-Session Memory</h2>
@@ -105,195 +832,863 @@
             </div>
         </div>
 
-        <!-- COLLECTIONS PANEL -->
+        <!-- ============================================================
+             COLLECTIONS PANEL
+             ============================================================ -->
         <div id="collections" class="panel">
             <div class="card">
                 <h2>Knowledge Base Collections</h2>
                 <div id="collectionsContent" class="empty">Loading...</div>
             </div>
         </div>
+
+        <!-- ============================================================
+             SYSTEM PANEL
+             ============================================================ -->
+        <div id="system" class="panel">
+            <div class="card">
+                <h2>TabbyAPI Service</h2>
+                <div id="systemContent" class="empty">Loading...</div>
+            </div>
+            <div class="card">
+                <h2>Configured Models</h2>
+                <div id="modelsContent" class="empty">Loading...</div>
+            </div>
+            <div class="card">
+                <h2>Output Files</h2>
+                <div id="outputContent" class="empty">Loading...</div>
+            </div>
+            <div class="card">
+                <h2>Logs</h2>
+                <div id="logsListContent" class="empty">Loading...</div>
+                <div id="logViewer" style="display:none;margin-top:12px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                        <span id="logViewerTitle" style="font-weight:600;font-size:13px;font-family:'Helvetica Neue',sans-serif"></span>
+                        <div style="display:flex;gap:8px">
+                            <button class="btn-secondary" onclick="refreshCurrentLog()" style="font-size:12px;padding:4px 10px">Refresh</button>
+                            <button class="btn-secondary" onclick="closeLogViewer()" style="font-size:12px;padding:4px 10px">Close</button>
+                        </div>
+                    </div>
+                    <pre id="logViewerContent" style="background:#1a1a2e;color:#e0e0e0;padding:14px;border-radius:8px;font-size:12px;line-height:1.6;max-height:500px;overflow:auto;white-space:pre-wrap;word-break:break-all"></pre>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
-        // Tab switching
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-                tab.classList.add('active');
-                document.getElementById(tab.dataset.panel).classList.add('active');
-            });
+    /* ==================================================================
+       JavaScript — Tab switching, data polling, form submission
+       ================================================================== */
+
+    // -- Tab switching -------------------------------------------------
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            tab.classList.add('active');
+            document.getElementById(tab.dataset.panel).classList.add('active');
         });
+    });
 
-        function badgeClass(category) {
-            const map = { paper: 'paper', preprint: 'paper', product: 'product', technique: 'technique', opportunity: 'opportunity', patent: 'patent', competitor: 'competitor' };
-            return map[category] || 'paper';
+    function switchToTab(name) {
+        document.querySelectorAll('.tab').forEach(t => {
+            t.classList.toggle('active', t.dataset.panel === name);
+        });
+        document.querySelectorAll('.panel').forEach(p => {
+            p.classList.toggle('active', p.id === name);
+        });
+    }
+
+    // -- Helpers -------------------------------------------------------
+    function badgeClass(category) {
+        const map = { paper: 'paper', preprint: 'paper', product: 'product', technique: 'technique', opportunity: 'opportunity', patent: 'patent', competitor: 'competitor' };
+        return map[category] || 'paper';
+    }
+
+    function scoreBar(value, max = 10, color = '#1a5276') {
+        const pct = Math.min((value / max) * 100, 100);
+        return `<span class="score-bar"><span class="fill" style="width:${pct}%;background:${color}"></span></span>${value}/${max}`;
+    }
+
+    async function fetchJSON(url) {
+        try {
+            const r = await fetch(url);
+            return await r.json();
+        } catch { return null; }
+    }
+
+    function formatElapsed(seconds) {
+        if (seconds < 60) return Math.round(seconds) + 's';
+        if (seconds < 3600) return Math.round(seconds / 60) + 'min';
+        return (seconds / 3600).toFixed(1) + 'h';
+    }
+
+    // -- Toast notifications ------------------------------------------
+    function showNotification(message, type) {
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 4500);
+    }
+
+    // -- Config loading (personas, databases) -------------------------
+    function populateSelect(selectId, personas, defaultKey) {
+        const sel = document.getElementById(selectId);
+        if (!sel || !personas) return;
+        // Keep the first "Default" option
+        while (sel.options.length > 1) sel.remove(1);
+        for (const [key, p] of Object.entries(personas)) {
+            const opt = document.createElement('option');
+            opt.value = key;
+            opt.textContent = `${p.name} — ${p.title}`;
+            if (key === defaultKey) opt.textContent += ' (default)';
+            sel.appendChild(opt);
+        }
+    }
+
+    async function loadConfig() {
+        const [personas, databases, collections] = await Promise.all([
+            fetchJSON('/api/config/personas'),
+            fetchJSON('/api/config/databases'),
+            fetchJSON('/api/collections'),
+        ]);
+
+        if (personas && !personas.error) {
+            populateSelect('r-persona', personas.researcher?.personas, personas.researcher?.default_persona);
+            populateSelect('a-pi', personas.pi?.personas, personas.pi?.default_persona);
+            populateSelect('a-reviewer', personas.reviewer?.personas, personas.reviewer?.default_persona);
+            populateSelect('a-methodologist', personas.methodologist?.personas, personas.methodologist?.default_persona);
         }
 
-        function scoreBar(value, max = 10, color = '#58a6ff') {
-            const pct = Math.min((value / max) * 100, 100);
-            return `<span class="score-bar"><span class="fill" style="width:${pct}%;background:${color}"></span></span>${value}/${max}`;
+        if (databases && Array.isArray(databases)) {
+            const container = document.getElementById('r-databases');
+            container.innerHTML = databases.map(db =>
+                `<label class="checkbox-label"><input type="checkbox" name="databases" value="${db}" checked> ${db.replace(/_/g, ' ')}</label>`
+            ).join('');
         }
 
-        async function fetchJSON(url) {
-            try {
-                const r = await fetch(url);
-                return await r.json();
-            } catch { return null; }
-        }
-
-        async function updateResearch() {
-            const data = await fetchJSON('/api/research/live');
-            const el = document.getElementById('researchContent');
-            const status = document.getElementById('globalStatus');
-
-            if (!data || !data.active) {
-                el.innerHTML = '<div class="empty">No active research session</div>';
-                return;
+        if (collections && Array.isArray(collections)) {
+            const sel = document.getElementById('r-reference');
+            for (const col of collections) {
+                if (col.count > 0) {
+                    const opt = document.createElement('option');
+                    opt.value = col.name;
+                    opt.textContent = `${col.name} (${col.count} chunks)`;
+                    sel.appendChild(opt);
+                }
             }
+        }
+    }
 
+    // -- Form submission handlers -------------------------------------
+
+    document.getElementById('researchForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('r-submit');
+        btn.disabled = true;
+        btn.textContent = 'Starting...';
+
+        const checkedDBs = [...document.querySelectorAll('#r-databases input:checked')].map(cb => cb.value);
+        const allDBs = [...document.querySelectorAll('#r-databases input')].map(cb => cb.value);
+
+        const data = {
+            topic: document.getElementById('r-topic').value,
+            hours: parseFloat(document.getElementById('r-hours').value) || 2,
+            persona: document.getElementById('r-persona').value || null,
+            year_from: parseInt(document.getElementById('r-year-from').value) || null,
+            index_to: document.getElementById('r-index-to').value || null,
+            collaborative: document.getElementById('r-collaborative').value || null,
+            no_protocols: document.getElementById('r-no-protocols').checked,
+            reference_collection: document.getElementById('r-reference').value || null,
+        };
+        // Only include databases if user unchecked some
+        if (checkedDBs.length < allDBs.length) {
+            data.databases = checkedDBs;
+        }
+
+        try {
+            const resp = await fetch('/api/research/start', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data),
+            });
+            const result = await resp.json();
+            if (resp.ok) {
+                showNotification('Research session started: ' + data.topic, 'success');
+                switchToTab('research');
+            } else {
+                showNotification(result.error || 'Failed to start session', 'error');
+            }
+        } catch (err) {
+            showNotification('Network error: ' + err.message, 'error');
+        }
+
+        btn.disabled = false;
+        btn.textContent = 'Start Research Session';
+    });
+
+    document.getElementById('analysisForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('a-submit');
+        btn.disabled = true;
+        btn.textContent = 'Starting...';
+
+        const data = {
+            topic: document.getElementById('a-topic').value,
+            collection: document.getElementById('a-collection').value || 'lab_documents',
+            rounds: parseInt(document.getElementById('a-rounds').value) || null,
+            time_limit: parseInt(document.getElementById('a-time-limit').value) || null,
+            pi_persona: document.getElementById('a-pi').value || null,
+            reviewer_persona: document.getElementById('a-reviewer').value || null,
+            methodologist_persona: document.getElementById('a-methodologist').value || null,
+        };
+
+        try {
+            const resp = await fetch('/api/analysis/start', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data),
+            });
+            const result = await resp.json();
+            if (resp.ok) {
+                showNotification('Analysis session started: ' + data.topic, 'success');
+                switchToTab('analysis');
+            } else {
+                showNotification(result.error || 'Failed to start session', 'error');
+            }
+        } catch (err) {
+            showNotification('Network error: ' + err.message, 'error');
+        }
+
+        btn.disabled = false;
+        btn.textContent = 'Start Analysis';
+    });
+
+    document.getElementById('ingestForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('i-submit');
+        btn.disabled = true;
+        btn.textContent = 'Ingesting...';
+
+        const data = {
+            input_path: document.getElementById('i-path').value,
+            collection: document.getElementById('i-collection').value || 'lab_documents',
+            recursive: document.getElementById('i-recursive').checked,
+        };
+
+        try {
+            const resp = await fetch('/api/ingest/start', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data),
+            });
+            const result = await resp.json();
+            if (resp.ok) {
+                showNotification('Document ingestion started', 'success');
+            } else {
+                showNotification(result.error || 'Failed to start ingestion', 'error');
+            }
+        } catch (err) {
+            showNotification('Network error: ' + err.message, 'error');
+        }
+
+        btn.disabled = false;
+        btn.textContent = 'Ingest Documents';
+    });
+
+    // -- Quick actions ------------------------------------------------
+
+    async function quickTest() {
+        const topic = document.getElementById('quick-topic').value.trim();
+        if (!topic) {
+            showNotification('Enter a topic first', 'error');
+            document.getElementById('quick-topic').focus();
+            return;
+        }
+        try {
+            const resp = await fetch('/api/analysis/start', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ topic, collection: 'lab_documents', rounds: 1, time_limit: 5 }),
+            });
+            const result = await resp.json();
+            if (resp.ok) {
+                showNotification('Quick test started: ' + topic, 'success');
+                switchToTab('analysis');
+            } else {
+                showNotification(result.error || 'Failed to start', 'error');
+            }
+        } catch (err) {
+            showNotification('Network error: ' + err.message, 'error');
+        }
+    }
+
+    async function quickResearch() {
+        const topic = document.getElementById('quick-topic').value.trim();
+        if (!topic) {
+            showNotification('Enter a topic first', 'error');
+            document.getElementById('quick-topic').focus();
+            return;
+        }
+        try {
+            const resp = await fetch('/api/research/start', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ topic, hours: 0.5 }),
+            });
+            const result = await resp.json();
+            if (resp.ok) {
+                showNotification('Quick research started: ' + topic, 'success');
+                switchToTab('research');
+            } else {
+                showNotification(result.error || 'Failed to start', 'error');
+            }
+        } catch (err) {
+            showNotification('Network error: ' + err.message, 'error');
+        }
+    }
+
+    // -- Full analysis form handler -----------------------------------
+
+    document.getElementById('fullAnalysisForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('fa-submit');
+        btn.disabled = true;
+        btn.textContent = 'Starting pipeline...';
+
+        const data = {
+            topic: document.getElementById('fa-topic').value,
+            input_path: document.getElementById('fa-path').value || null,
+            collection: document.getElementById('fa-collection').value || 'lab_documents',
+            rounds: parseInt(document.getElementById('fa-rounds').value) || 6,
+            time_limit: parseInt(document.getElementById('fa-time-limit').value) || 30,
+            recursive: document.getElementById('fa-recursive').checked,
+        };
+
+        try {
+            const resp = await fetch('/api/fullanalysis/start', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data),
+            });
+            const result = await resp.json();
+            if (resp.ok) {
+                const msg = data.input_path
+                    ? 'Full analysis started (ingest + analyze): ' + data.topic
+                    : 'Analysis started: ' + data.topic;
+                showNotification(msg, 'success');
+                switchToTab('analysis');
+            } else {
+                showNotification(result.error || 'Failed to start', 'error');
+            }
+        } catch (err) {
+            showNotification('Network error: ' + err.message, 'error');
+        }
+
+        btn.disabled = false;
+        btn.textContent = 'Run Full Analysis';
+    });
+
+    // -- System status ------------------------------------------------
+
+    async function updateSystemStatus() {
+        const data = await fetchJSON('/api/system/status');
+        const sysEl = document.getElementById('systemContent');
+        const modelsEl = document.getElementById('modelsContent');
+        const outputEl = document.getElementById('outputContent');
+
+        if (!data) {
+            if (sysEl) sysEl.innerHTML = '<div class="empty">Could not load system status</div>';
+            return;
+        }
+
+        const tabbyColor = data.tabby.status === 'online' ? '#27703a' : '#922b21';
+        const tabbyLabel = data.tabby.status.toUpperCase();
+        if (sysEl) sysEl.innerHTML = `
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+                <span style="font-family:'Helvetica Neue',sans-serif;font-size:14px;font-weight:600">TabbyAPI</span>
+                <span class="badge" style="background:${data.tabby.status === 'online' ? '#d4efdf' : '#fadbd8'};color:${tabbyColor}">${tabbyLabel}</span>
+                <span style="color:#6b6b6b;font-size:13px;font-family:'Helvetica Neue',sans-serif">${data.tabby.url}</span>
+            </div>
+            <p style="font-size:13px;color:#6b6b6b;font-family:'Helvetica Neue',sans-serif">
+                Local inference via TabbyAPI + EXL2 quantized models. Sequential hot-swap, one model in VRAM at a time.
+            </p>
+        `;
+
+        const models = data.models || {};
+        if (modelsEl) {
+            if (Object.keys(models).length > 0) {
+                let html = '<table><tr><th>Role</th><th>Model</th><th>Temp</th><th>Context</th><th>Max Tokens</th></tr>';
+                for (const [role, m] of Object.entries(models)) {
+                    html += `<tr>
+                        <td style="font-weight:600;text-transform:capitalize">${role}</td>
+                        <td>${m.name}</td>
+                        <td>${m.temperature}</td>
+                        <td>${m.max_seq_len.toLocaleString()}</td>
+                        <td>${m.max_tokens.toLocaleString()}</td>
+                    </tr>`;
+                }
+                html += '</table>';
+                modelsEl.innerHTML = html;
+            } else {
+                modelsEl.innerHTML = '<div class="empty">No models configured</div>';
+            }
+        }
+
+        const out = data.output || {};
+        if (outputEl) outputEl.innerHTML = `
+            <div class="grid">
+                <div class="stat"><div class="value">${out.research_files || 0}</div><div class="label">Research Reports</div></div>
+                <div class="stat"><div class="value">${out.transcript_files || 0}</div><div class="label">Transcripts</div></div>
+                <div class="stat"><div class="value">${out.cache_files || 0}</div><div class="label">Cache Entries</div></div>
+                <div class="stat"><div class="value">${out.memory_files || 0}</div><div class="label">Memory Files</div></div>
+            </div>
+        `;
+    }
+
+    // -- Logs ---------------------------------------------------------
+
+    let currentLogPath = null;
+
+    async function updateLogsList() {
+        const data = await fetchJSON('/api/logs');
+        const el = document.getElementById('logsListContent');
+        if (!el) return;
+
+        if (!data || data.length === 0) {
+            el.innerHTML = '<div class="empty">No log files found</div>';
+            return;
+        }
+
+        el.innerHTML = data.map(log => {
+            const size = log.size < 1024 ? `${log.size} B`
+                : log.size < 1048576 ? `${(log.size / 1024).toFixed(1)} KB`
+                : `${(log.size / 1048576).toFixed(1)} MB`;
+            const running = log.running ? ' <span class="badge" style="background:#d4efdf;color:#27703a;font-size:11px">LIVE</span>' : '';
+            return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee">
+                <div>
+                    <span style="font-weight:500;font-size:13px;font-family:'Helvetica Neue',sans-serif">${log.name}</span>${running}
+                    <span style="color:#999;font-size:12px;margin-left:8px">${size}</span>
+                </div>
+                <button class="btn-secondary" onclick="viewLog('${log.path}', '${log.name.replace(/'/g, "\\'")}')" style="font-size:12px;padding:4px 10px">View</button>
+            </div>`;
+        }).join('');
+    }
+
+    async function viewLog(path, name) {
+        currentLogPath = path;
+        const data = await fetchJSON(`/api/logs/read?path=${encodeURIComponent(path)}&lines=200`);
+        const viewer = document.getElementById('logViewer');
+        const title = document.getElementById('logViewerTitle');
+        const content = document.getElementById('logViewerContent');
+
+        if (!data || data.error) {
+            content.textContent = data?.error || 'Failed to load log';
+        } else {
+            content.textContent = data.lines.join('\n');
+            title.textContent = `${name} (${data.total_lines} total lines, showing last ${data.lines.length})`;
+        }
+        viewer.style.display = '';
+        content.scrollTop = content.scrollHeight;
+    }
+
+    function refreshCurrentLog() {
+        if (currentLogPath) {
+            const name = document.getElementById('logViewerTitle').textContent.split(' (')[0];
+            viewLog(currentLogPath, name);
+        }
+    }
+
+    function closeLogViewer() {
+        document.getElementById('logViewer').style.display = 'none';
+        currentLogPath = null;
+    }
+
+    // -- Process status polling ---------------------------------------
+
+    async function updateProcesses() {
+        const data = await fetchJSON('/api/process/status');
+        const card = document.getElementById('processesCard');
+        const el = document.getElementById('processesContent');
+
+        if (!data || data.length === 0) {
+            card.style.display = 'none';
+            return;
+        }
+
+        card.style.display = '';
+        el.innerHTML = data.map(p => {
+            const statusHtml = p.running
+                ? `<button class="btn-danger" onclick="stopProcess('${p.id}')">Stop</button>`
+                : (p.returncode === 0
+                    ? '<span class="process-done">Completed</span>'
+                    : `<span class="process-failed">Exited (${p.returncode})</span>`);
+            return `
+                <div class="process-item">
+                    <div class="process-info">
+                        <span class="process-type">${p.type}</span>
+                        <span class="process-topic">${p.topic.length > 50 ? p.topic.substring(0, 50) + '...' : p.topic}</span>
+                        <span class="process-elapsed">${formatElapsed(p.elapsed)}</span>
+                    </div>
+                    ${statusHtml}
+                </div>
+            `;
+        }).join('');
+    }
+
+    async function stopProcess(id) {
+        try {
+            const resp = await fetch('/api/process/stop', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ id }),
+            });
+            const result = await resp.json();
+            if (resp.ok) {
+                showNotification('Process stopped', 'success');
+            } else {
+                showNotification(result.error || 'Failed to stop process', 'error');
+            }
+        } catch (err) {
+            showNotification('Network error: ' + err.message, 'error');
+        }
+        updateProcesses();
+    }
+
+    // -- Live research polling ----------------------------------------
+
+    async function updateResearch() {
+        const data = await fetchJSON('/api/research/live');
+        const el = document.getElementById('researchContent');
+        const status = document.getElementById('globalStatus');
+
+        if (!data || !data.active) {
+            el.innerHTML = '<div class="empty">No active research session</div>';
+            return;
+        }
+
+        status.textContent = 'Research Running';
+        status.className = 'status active';
+
+        const pct = data.elapsed_hours / (data.elapsed_hours + data.remaining_hours) * 100;
+
+        el.innerHTML = `
+            <h3 style="font-size:15px;color:#2c2c2c;margin-bottom:8px">${data.topic}</h3>
+            <div class="progress-bar"><div class="fill" style="width:${pct.toFixed(1)}%"></div></div>
+            <p style="font-size:12px;color:#6b6b6b;margin-top:8px;font-family:'Helvetica Neue',sans-serif">
+                ${data.elapsed_hours.toFixed(1)}h elapsed / ${data.remaining_hours.toFixed(1)}h remaining — Cycle ${data.cycle}
+            </p>
+            <div class="grid" style="margin-top:16px">
+                <div class="stat"><div class="value">${data.total_queries || 0}</div><div class="label">Queries</div></div>
+                <div class="stat"><div class="value">${data.total_results || 0}</div><div class="label">Results</div></div>
+                <div class="stat"><div class="value">${data.papers || 0}</div><div class="label">Papers</div></div>
+                <div class="stat"><div class="value">${data.products || 0}</div><div class="label">Products</div></div>
+                <div class="stat"><div class="value">${data.techniques || 0}</div><div class="label">Techniques</div></div>
+                <div class="stat"><div class="value">${data.opportunities || 0}</div><div class="label">Opportunities</div></div>
+                <div class="stat"><div class="value">${data.patents || 0}</div><div class="label">Patents</div></div>
+            </div>
+        `;
+    }
+
+    // -- Live analysis polling ----------------------------------------
+
+    async function updateAnalysis() {
+        const data = await fetchJSON('/api/analysis/live');
+        const el = document.getElementById('analysisContent');
+        const status = document.getElementById('globalStatus');
+
+        if (!data || !data.topic) {
+            el.innerHTML = '<div class="empty">No active analysis session</div>';
+            return;
+        }
+
+        if (data.phase !== 'done') {
+            status.textContent = 'Analysis Running';
+            status.className = 'status active';
+        }
+
+        let turnsHtml = '';
+        const turns = data.turns || [];
+        for (const t of turns.slice(-6)) {
+            turnsHtml += `
+                <div class="finding-item">
+                    <div class="finding-title">${t.name || t.agent} — Round ${t.round_num || '?'}</div>
+                    <div style="font-size:13px;margin-top:4px">${(t.analysis || '').substring(0, 300)}${(t.analysis || '').length > 300 ? '...' : ''}</div>
+                </div>
+            `;
+        }
+
+        el.innerHTML = `
+            <h3 style="font-size:15px;color:#2c2c2c;margin-bottom:8px">${data.topic}</h3>
+            <p style="font-size:12px;color:#6b6b6b;font-family:'Helvetica Neue',sans-serif">
+                Phase: ${data.phase} | Round: ${data.round_num} | Documents: ${(data.documents_analyzed || []).length}
+            </p>
+            <div style="margin-top:12px">${turnsHtml || '<div class="empty">No turns yet</div>'}</div>
+        `;
+    }
+
+    // -- Past sessions polling ----------------------------------------
+
+    async function updateSessions() {
+        const data = await fetchJSON('/api/research/sessions');
+        const el = document.getElementById('sessionsContent');
+
+        if (!data || data.length === 0) {
+            el.innerHTML = '<div class="empty">No completed research sessions</div>';
+            return;
+        }
+
+        let html = '<table><tr><th>Topic</th><th>Duration</th><th>Results</th><th>Papers</th><th>Products</th><th>Techniques</th></tr>';
+        for (const s of data) {
+            html += `<tr>
+                <td>${s.topic.substring(0, 60)}${s.topic.length > 60 ? '...' : ''}</td>
+                <td>${s.elapsed_hours.toFixed(1)}h</td>
+                <td>${s.total_results}</td>
+                <td>${s.papers}</td>
+                <td>${s.products}</td>
+                <td>${s.techniques}</td>
+            </tr>`;
+        }
+        html += '</table>';
+        el.innerHTML = html;
+    }
+
+    async function updateTranscripts() {
+        const data = await fetchJSON('/api/transcripts');
+        const el = document.getElementById('transcriptsContent');
+
+        if (!data || data.length === 0) {
+            el.innerHTML = '<div class="empty">No completed analysis transcripts</div>';
+            return;
+        }
+
+        let html = '<table><tr><th>Topic</th><th>Rounds</th><th>Documents</th><th>Status</th></tr>';
+        for (const t of data) {
+            const status = t.finished ? '<span style="color:#27703a">Complete</span>' : '<span style="color:#6b6b6b">Partial</span>';
+            html += `<tr>
+                <td>${t.topic.substring(0, 60)}${t.topic.length > 60 ? '...' : ''}</td>
+                <td>${t.rounds}</td>
+                <td>${t.documents}</td>
+                <td>${status}</td>
+            </tr>`;
+        }
+        html += '</table>';
+        el.innerHTML = html;
+    }
+
+    // -- Memory polling -----------------------------------------------
+
+    async function updateMemory() {
+        const data = await fetchJSON('/api/memory');
+        const el = document.getElementById('memoryContent');
+
+        if (!data || data.error) {
+            el.innerHTML = '<div class="empty">Memory not initialized yet</div>';
+            return;
+        }
+
+        let leadsHtml = '';
+        if (data.pending_leads_detail && data.pending_leads_detail.length > 0) {
+            leadsHtml = '<h3 style="font-size:14px;color:#6b6b6b;margin:16px 0 8px;font-family:\'Helvetica Neue\',sans-serif">Pending Leads</h3>';
+            leadsHtml += '<table><tr><th>Title</th><th>Reason</th></tr>';
+            for (const l of data.pending_leads_detail) {
+                leadsHtml += `<tr><td>${l.title.substring(0, 60)}...</td><td>${l.reason}</td></tr>`;
+            }
+            leadsHtml += '</table>';
+        }
+
+        el.innerHTML = `
+            <div class="grid">
+                <div class="stat"><div class="value">${data.known_findings}</div><div class="label">Known Findings</div></div>
+                <div class="stat"><div class="value">${data.search_queries}</div><div class="label">Search Queries</div></div>
+                <div class="stat"><div class="value">${data.topic_connections}</div><div class="label">Topic Links</div></div>
+                <div class="stat"><div class="value">${data.pending_leads}</div><div class="label">Pending Leads</div></div>
+            </div>
+            ${data.best_databases && data.best_databases.length
+                ? `<p style="font-size:13px;color:#6b6b6b;margin-top:14px;font-family:'Helvetica Neue',sans-serif"><strong>Best databases:</strong> ${data.best_databases.join(', ')}</p>`
+                : ''}
+            ${leadsHtml}
+        `;
+    }
+
+    // -- Collections polling -------------------------------------------
+
+    async function updateCollections() {
+        const data = await fetchJSON('/api/collections');
+        const el = document.getElementById('collectionsContent');
+
+        if (!data || data.length === 0 || data.error) {
+            el.innerHTML = '<div class="empty">No collections found</div>';
+            return;
+        }
+
+        let html = '<table><tr><th>Collection</th><th>Chunks</th></tr>';
+        for (const c of data) {
+            html += `<tr><td>${c.name}</td><td>${c.count}</td></tr>`;
+        }
+        html += '</table>';
+        el.innerHTML = html;
+    }
+
+    // -- Global status reset ------------------------------------------
+
+    async function updateGlobalStatus() {
+        const research = await fetchJSON('/api/research/live');
+        const analysis = await fetchJSON('/api/analysis/live');
+        const status = document.getElementById('globalStatus');
+
+        const researchActive = research && research.active;
+        const analysisActive = analysis && analysis.topic && analysis.phase !== 'done';
+
+        if (researchActive) {
             status.textContent = 'Research Running';
             status.className = 'status active';
-
-            const pct = data.elapsed_hours / (data.elapsed_hours + data.remaining_hours) * 100;
-
-            el.innerHTML = `
-                <h3>${data.topic}</h3>
-                <div class="progress-bar"><div class="fill" style="width:${pct.toFixed(1)}%"></div></div>
-                <p style="font-size:12px;color:#8b949e;margin-top:8px">
-                    ${data.elapsed_hours.toFixed(1)}h elapsed / ${data.remaining_hours.toFixed(1)}h remaining — Cycle ${data.cycle}
-                </p>
-                <div class="grid" style="margin-top:16px">
-                    <div class="stat"><div class="value">${data.total_queries || 0}</div><div class="label">Queries</div></div>
-                    <div class="stat"><div class="value">${data.total_results || 0}</div><div class="label">Results</div></div>
-                    <div class="stat"><div class="value">${data.papers || 0}</div><div class="label">Papers</div></div>
-                    <div class="stat"><div class="value">${data.products || 0}</div><div class="label">Products</div></div>
-                    <div class="stat"><div class="value">${data.techniques || 0}</div><div class="label">Techniques</div></div>
-                    <div class="stat"><div class="value">${data.opportunities || 0}</div><div class="label">Opportunities</div></div>
-                    <div class="stat"><div class="value">${data.patents || 0}</div><div class="label">Patents</div></div>
-                </div>
-            `;
+        } else if (analysisActive) {
+            status.textContent = 'Analysis Running';
+            status.className = 'status active';
+        } else {
+            status.textContent = 'Ready';
+            status.className = 'status idle';
         }
+    }
 
-        async function updateAnalysis() {
-            const data = await fetchJSON('/api/analysis/live');
-            const el = document.getElementById('analysisContent');
-            const status = document.getElementById('globalStatus');
+    // -- Polling intervals --------------------------------------------
 
-            if (!data || !data.topic) {
-                el.innerHTML = '<div class="empty">No active analysis session</div>';
+    // Live data — every 3 seconds
+    setInterval(updateResearch, 3000);
+    setInterval(updateAnalysis, 3000);
+    setInterval(updateProcesses, 5000);
+    setInterval(updateGlobalStatus, 5000);
+
+    // Slower polls for static data
+    setInterval(updateSessions, 15000);
+    setInterval(updateTranscripts, 15000);
+    setInterval(updateMemory, 15000);
+    setInterval(updateCollections, 30000);
+    setInterval(updateSystemStatus, 15000);
+    setInterval(updateLogsList, 10000);
+
+    // Initial load
+    loadConfig();
+    updateProcesses();
+    updateResearch();
+    updateAnalysis();
+    updateGlobalStatus();
+    updateSessions();
+    updateTranscripts();
+    updateMemory();
+    updateCollections();
+    updateSystemStatus();
+    updateLogsList();
+    </script>
+
+    <!-- Folder picker modal -->
+    <div class="picker-overlay" id="pickerOverlay">
+        <div class="picker-box">
+            <div class="picker-header">
+                <h3>Select Folder or File</h3>
+            </div>
+            <div class="picker-path" id="pickerPath"></div>
+            <div class="picker-list" id="pickerList"></div>
+            <div class="picker-footer">
+                <button class="btn-cancel" onclick="closePicker()">Cancel</button>
+                <button class="btn-primary" onclick="confirmPicker()">Select This Folder</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // -- Folder picker ------------------------------------------------
+    let _pickerTarget = null;
+    let _pickerCurrentPath = null;
+
+    function openPicker(inputId) {
+        _pickerTarget = inputId;
+        const existing = document.getElementById(inputId).value.trim();
+        loadPickerPath(existing || '');
+        document.getElementById('pickerOverlay').classList.add('open');
+    }
+
+    function closePicker() {
+        document.getElementById('pickerOverlay').classList.remove('open');
+        _pickerTarget = null;
+    }
+
+    function confirmPicker() {
+        if (_pickerTarget && _pickerCurrentPath) {
+            document.getElementById(_pickerTarget).value = _pickerCurrentPath;
+        }
+        closePicker();
+    }
+
+    function selectFile(filename) {
+        if (_pickerTarget && _pickerCurrentPath) {
+            document.getElementById(_pickerTarget).value = _pickerCurrentPath + '/' + filename;
+        }
+        closePicker();
+    }
+
+    async function loadPickerPath(dirPath) {
+        const list = document.getElementById('pickerList');
+        const pathEl = document.getElementById('pickerPath');
+        list.innerHTML = '<div class="picker-empty">Loading...</div>';
+
+        try {
+            const url = '/api/browse' + (dirPath ? '?path=' + encodeURIComponent(dirPath) : '');
+            const resp = await fetch(url);
+            const data = await resp.json();
+
+            if (!resp.ok) {
+                list.innerHTML = `<div class="picker-empty">${data.error || 'Cannot open'}</div>`;
                 return;
             }
 
-            if (data.phase !== 'done') {
-                status.textContent = 'Analysis Running';
-                status.className = 'status active';
+            _pickerCurrentPath = data.path;
+            pathEl.textContent = data.path;
+
+            let html = '';
+
+            // Parent directory link
+            if (data.parent) {
+                html += `<div class="picker-item dir" onclick="loadPickerPath('${data.parent.replace(/'/g, "\\'")}')">
+                    <span class="picker-icon">..</span> <span>Parent folder</span>
+                </div>`;
             }
 
-            let turnsHtml = '';
-            const turns = data.turns || [];
-            for (const t of turns.slice(-6)) {
-                turnsHtml += `
-                    <div class="finding-item">
-                        <div class="finding-title">${t.name || t.agent} — Round ${t.round_num || '?'}</div>
-                        <div style="font-size:13px;margin-top:4px">${(t.analysis || '').substring(0, 300)}${(t.analysis || '').length > 300 ? '...' : ''}</div>
-                    </div>
-                `;
+            // Directories
+            for (const d of data.dirs) {
+                const full = data.path + '/' + d;
+                html += `<div class="picker-item dir" onclick="loadPickerPath('${full.replace(/'/g, "\\'")}')">
+                    <span class="picker-icon">&#128193;</span> <span>${d}</span>
+                </div>`;
             }
 
-            el.innerHTML = `
-                <h3>${data.topic}</h3>
-                <p style="font-size:12px;color:#8b949e">Phase: ${data.phase} | Round: ${data.round_num} | Documents: ${(data.documents_analyzed || []).length}</p>
-                <div style="margin-top:12px">${turnsHtml || '<div class="empty">No turns yet</div>'}</div>
-            `;
+            // Files
+            for (const f of data.files) {
+                html += `<div class="picker-item file" onclick="selectFile('${f.replace(/'/g, "\\'")}')">
+                    <span class="picker-icon">&#128196;</span> <span>${f}</span>
+                </div>`;
+            }
+
+            if (!html) {
+                html = '<div class="picker-empty">No folders or supported files here</div>';
+            }
+
+            list.innerHTML = html;
+        } catch (err) {
+            list.innerHTML = `<div class="picker-empty">Error: ${err.message}</div>`;
         }
+    }
 
-        async function updateSessions() {
-            const data = await fetchJSON('/api/research/sessions');
-            const el = document.getElementById('sessionsContent');
-
-            if (!data || data.length === 0) {
-                el.innerHTML = '<div class="empty">No completed research sessions</div>';
-                return;
-            }
-
-            let html = '<table><tr><th>Topic</th><th>Duration</th><th>Results</th><th>Papers</th><th>Products</th><th>Techniques</th></tr>';
-            for (const s of data) {
-                html += `<tr>
-                    <td>${s.topic.substring(0, 60)}${s.topic.length > 60 ? '...' : ''}</td>
-                    <td>${s.elapsed_hours.toFixed(1)}h</td>
-                    <td>${s.total_results}</td>
-                    <td>${s.papers}</td>
-                    <td>${s.products}</td>
-                    <td>${s.techniques}</td>
-                </tr>`;
-            }
-            html += '</table>';
-            el.innerHTML = html;
-        }
-
-        async function updateMemory() {
-            const data = await fetchJSON('/api/memory');
-            const el = document.getElementById('memoryContent');
-
-            if (!data || data.error) {
-                el.innerHTML = '<div class="empty">Memory not initialized yet</div>';
-                return;
-            }
-
-            let leadsHtml = '';
-            if (data.pending_leads_detail && data.pending_leads_detail.length > 0) {
-                leadsHtml = '<h3>Pending Leads</h3><table><tr><th>Title</th><th>Reason</th></tr>';
-                for (const l of data.pending_leads_detail) {
-                    leadsHtml += `<tr><td>${l.title.substring(0, 60)}...</td><td>${l.reason}</td></tr>`;
-                }
-                leadsHtml += '</table>';
-            }
-
-            el.innerHTML = `
-                <div class="grid">
-                    <div class="stat"><div class="value">${data.known_findings}</div><div class="label">Known Findings</div></div>
-                    <div class="stat"><div class="value">${data.search_queries}</div><div class="label">Search Queries</div></div>
-                    <div class="stat"><div class="value">${data.topic_connections}</div><div class="label">Topic Links</div></div>
-                    <div class="stat"><div class="value">${data.pending_leads}</div><div class="label">Pending Leads</div></div>
-                </div>
-                ${data.best_databases && data.best_databases.length ? `<h3>Best Databases</h3><p>${data.best_databases.join(', ')}</p>` : ''}
-                ${leadsHtml}
-            `;
-        }
-
-        async function updateCollections() {
-            const data = await fetchJSON('/api/collections');
-            const el = document.getElementById('collectionsContent');
-
-            if (!data || data.length === 0 || data.error) {
-                el.innerHTML = '<div class="empty">No collections found</div>';
-                return;
-            }
-
-            let html = '<table><tr><th>Collection</th><th>Chunks</th></tr>';
-            for (const c of data) {
-                html += `<tr><td>${c.name}</td><td>${c.count}</td></tr>`;
-            }
-            html += '</table>';
-            el.innerHTML = html;
-        }
-
-        // Poll every 2 seconds for live data
-        setInterval(updateResearch, 2000);
-        setInterval(updateAnalysis, 2000);
-
-        // Slower polls for static data
-        setInterval(updateSessions, 15000);
-        setInterval(updateMemory, 15000);
-        setInterval(updateCollections, 30000);
-
-        // Initial load
-        updateResearch();
-        updateAnalysis();
-        updateSessions();
-        updateMemory();
-        updateCollections();
+    // Close picker on overlay click
+    document.getElementById('pickerOverlay').addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) closePicker();
+    });
+    // Close picker on Escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closePicker();
+    });
     </script>
 </body>
 </html>

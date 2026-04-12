@@ -112,8 +112,18 @@ class ResearchSession:
                 self.total_results += 1
 
     def categorize_finding(self, finding: dict, evaluation: dict):
-        """Categorize an evaluated finding."""
+        """Categorize an evaluated finding (deduplicated by URL and title)."""
         combined = {**finding, **evaluation}
+
+        # Deduplicate — skip if we already have this URL or exact title
+        url = combined.get("url", "").strip()
+        title = combined.get("title", "").lower().strip()
+        for existing in self.evaluated_findings:
+            if url and url == existing.get("url", "").strip():
+                return
+            if title and title == existing.get("title", "").lower().strip():
+                return
+
         category = evaluation.get("category", "paper")
 
         target = {
@@ -214,6 +224,7 @@ class ResearchOrchestrator:
         index_to_collection: str | None = None,
         generate_protocols: bool = True,
         collaborative_collection: str | None = None,
+        reference_collection: str | None = None,
     ) -> ResearchSession:
         """Run an autonomous research session.
 
@@ -225,6 +236,7 @@ class ResearchOrchestrator:
             index_to_collection: If set, index top findings into this ChromaDB collection
             generate_protocols: Generate lab protocols for top actionable findings
             collaborative_collection: If set, index findings in real-time for analysis agents
+            reference_collection: If set, query this ChromaDB collection for background context
         """
         session = ResearchSession(
             topic, time_limit_hours,
@@ -263,7 +275,23 @@ class ResearchOrchestrator:
             leads_str = "; ".join(l["title"][:40] for l in pending_leads[:3])
             memory_context += f"\nPending leads to follow up: {leads_str}"
 
+        # Reference documents from an ingested collection
+        reference_context = ""
+        if reference_collection:
+            try:
+                ref_chunks = self.indexer.query(topic, collection_name=reference_collection, top_k=10)
+                if ref_chunks:
+                    reference_context = "\n\nREFERENCE DOCUMENTS (from ingested collection):\n"
+                    for i, chunk in enumerate(ref_chunks, 1):
+                        source = chunk.get("metadata", {}).get("source", "unknown")
+                        reference_context += f"\n--- Reference {i} (source: {source}) ---\n{chunk['text'][:600]}\n"
+                    logger.info(f"Loaded {len(ref_chunks)} reference chunks from collection '{reference_collection}'")
+            except Exception as e:
+                logger.warning(f"Failed to load reference collection '{reference_collection}': {e}")
+
         logger.info(f"Starting research session: '{topic}' | limit: {time_limit_hours}h | databases: {databases}")
+        if reference_context:
+            memory_context += reference_context
         if memory_context:
             logger.info(f"Memory context: {memory_context}")
         self._publish_status(session, "running")
@@ -294,10 +322,14 @@ class ResearchOrchestrator:
                     logger.warning("Agent produced no search plan, generating fallback queries")
                     search_plan = [{"query": f"{topic} {datetime.now().year}", "database": "semantic_scholar"}]
 
-                # Inject pending leads as queries
+                # Inject pending leads as queries (truncate titles to key terms)
                 for lead in pending_leads[:2]:
-                    search_plan.append({"query": lead["title"], "database": "semantic_scholar", "rationale": "follow-up from pending lead"})
-                    self.memory.mark_lead_followed(lead["title"])
+                    # Extract first 6 meaningful words from title, skip articles/prepositions
+                    words = [w for w in (lead.get("title") or "").split() if len(w) > 2][:6]
+                    lead_query = " ".join(words)
+                    if lead_query:
+                        search_plan.append({"query": lead_query, "database": "semantic_scholar", "rationale": "follow-up from pending lead"})
+                    self.memory.mark_lead_followed(lead.get("title", ""))
 
                 # === Step 2: SEARCH ===
                 cycle_findings = []
@@ -310,6 +342,18 @@ class ResearchOrchestrator:
 
                     if not query or query in session.search_history:
                         continue
+
+                    # Filter bad queries: too long, too many AND terms, or contains site: prefix
+                    and_count = query.upper().count(" AND ")
+                    if and_count > 3:
+                        logger.info(f"  Skipping over-chained query ({and_count} ANDs): {query[:80]}")
+                        continue
+                    if len(query) > 200:
+                        logger.info(f"  Skipping overly long query ({len(query)} chars): {query[:80]}")
+                        continue
+                    if query.lower().startswith(("arxiv.org", "pubmed", "site:")):
+                        query = query.split('"', 1)[-1].strip(' "') if '"' in query else query
+                        logger.info(f"  Cleaned site-prefixed query to: {query[:80]}")
 
                     session.search_history.append(query)
                     session.total_queries += 1
@@ -349,8 +393,10 @@ class ResearchOrchestrator:
                                     f"High relevance+novelty ({combined_score}/20) but low actionability"
                                 )
 
+                    # Filter out off-topic findings (relevance < 4) before ranking
+                    relevant = [f for f in session.evaluated_findings if f.get("relevance", 0) >= 4]
                     session.top_findings = sorted(
-                        session.evaluated_findings,
+                        relevant,
                         key=lambda x: (x.get("relevance", 0) + x.get("novelty", 0) + x.get("actionability", 0)),
                         reverse=True,
                     )[:100]
@@ -413,44 +459,64 @@ class ResearchOrchestrator:
 
         # === FINAL PHASE ===
         logger.info("\nGenerating final discovery report...")
+        final_report = ""
 
         # Final trend analysis
-        if self.trend_detector.findings_by_cycle:
-            final_trends = self.trend_detector.format_trends_for_report()
-            session.trend_reports.append(final_trends)
+        try:
+            if self.trend_detector.findings_by_cycle:
+                final_trends = self.trend_detector.format_trends_for_report()
+                session.trend_reports.append(final_trends)
+        except Exception as e:
+            logger.error(f"Trend analysis failed: {e}")
 
         # Generate protocols for top actionable findings
-        if generate_protocols and session.top_findings:
-            logger.info("Generating lab protocols for top findings...")
-            proto_gen = ProtocolGenerator(self.tabby)
-            protocols = proto_gen.generate_protocols_batch(session.top_findings, model_cfg, max_protocols=5)
-            session.protocols = protocols
+        try:
+            if generate_protocols and session.top_findings:
+                logger.info("Generating lab protocols for top findings...")
+                proto_gen = ProtocolGenerator(self.tabby)
+                protocols = proto_gen.generate_protocols_batch(session.top_findings, model_cfg, max_protocols=5)
+                session.protocols = protocols
+        except Exception as e:
+            logger.error(f"Protocol generation failed: {e}")
 
-        # Final report
-        final_report = self._generate_final_report(agent, model_cfg, session)
-        session.intermediate_reports.append(final_report)
+        # Final LLM-generated report (non-critical — data is saved regardless)
+        try:
+            final_report = self._generate_final_report(agent, model_cfg, session)
+            session.intermediate_reports.append(final_report)
+        except Exception as e:
+            logger.error(f"Final report generation failed: {e}")
+            final_report = f"(Report generation failed: {e}. See findings below.)"
 
         # Index top findings
-        if index_to_collection and session.top_findings:
-            self._index_findings(session, index_to_collection)
+        try:
+            if index_to_collection and session.top_findings:
+                self._index_findings(session, index_to_collection)
+        except Exception as e:
+            logger.error(f"Indexing failed: {e}")
 
         # Remember findings for future sessions
-        self.memory.remember_findings(session.evaluated_findings, session.session_id)
+        try:
+            self.memory.remember_findings(session.evaluated_findings, session.session_id)
 
-        # Record topic connections for knowledge graph
-        if session.trend_reports:
-            trends = self.trend_detector.detect_trends()
-            for ht in trends.get("hot_topics", [])[:5]:
-                for kw in ht["keywords"]:
-                    self.memory.add_topic_connection(topic, kw, "related_discovery", ht["heat_score"])
+            # Record topic connections for knowledge graph
+            if session.trend_reports:
+                trends = self.trend_detector.detect_trends()
+                for ht in trends.get("hot_topics", [])[:5]:
+                    for kw in ht["keywords"]:
+                        self.memory.add_topic_connection(topic, kw, "related_discovery", ht["heat_score"])
+        except Exception as e:
+            logger.error(f"Memory save failed: {e}")
 
-        # Save everything
+        # Save everything — this always runs
         session.checkpoint()
         self._save_full_report(session, final_report)
         self._publish_status(session, "done")
 
         # Send completion email
-        self.notifier.notify_session_complete(session)
+        try:
+            self.notifier.notify_session_complete(session)
+        except Exception as e:
+            logger.error(f"Email notification failed: {e}")
 
         logger.info(f"\nResearch session complete:")
         logger.info(f"  Duration: {session.elapsed_hours:.1f} hours ({session.cycle} cycles)")
@@ -553,7 +619,7 @@ class ResearchOrchestrator:
                 continue
             session.citation_chains_followed.append(paper_id)
 
-            logger.info(f"  Following citations for: {finding.get('title', '')[:60]}...")
+            logger.info(f"  Following citations for: {(finding.get('title') or '')[:60]}...")
             citing = search_semantic_scholar_citations(paper_id, max_results=10)
             citing = self.memory.filter_new_findings(citing)
             session.add_findings(citing)
@@ -575,13 +641,13 @@ class ResearchOrchestrator:
             if text:
                 finding["full_text"] = text
                 extracted += 1
-                logger.info(f"  Extracted {len(text)} chars from: {finding.get('title', '')[:50]}...")
+                logger.info(f"  Extracted {len(text)} chars from: {(finding.get('title') or '')[:50]}...")
 
     def _index_findings_incremental(self, session: ResearchSession, findings: list[dict], collection_name: str):
         """Index findings in real-time for collaborative mode with analysis agents."""
         chunks = []
         for i, f in enumerate(findings):
-            text = f"{f.get('title', '')}\n\n{f.get('abstract', '')}"
+            text = f"{f.get('title') or ''}\n\n{f.get('abstract') or ''}"
             if f.get("insight"):
                 text += f"\n\nKey insight: {f['insight']}"
 
@@ -589,7 +655,7 @@ class ResearchOrchestrator:
                 "text": text,
                 "chunk_id": f"live_{session.session_id}::c{session.cycle}_f{i}",
                 "source": f"research_live_{session.session_id}",
-                "source_path": f"research:{f.get('url', '')}",
+                "source_path": f"research:{f.get('url') or ''}",
                 "section": f.get("category", "paper"),
                 "metadata": {"format": ".research", "chunk_index": i},
             })
@@ -727,7 +793,7 @@ Be specific and actionable. The lab director will use this to make investment an
         """Index top findings into ChromaDB for use by analysis agents."""
         chunks = []
         for i, f in enumerate(session.top_findings[:50]):
-            text = f"{f.get('title', '')}\n\n{f.get('abstract', '')}"
+            text = f"{f.get('title') or ''}\n\n{f.get('abstract') or ''}"
             if f.get("full_text"):
                 text += f"\n\n{f['full_text'][:2000]}"
             if f.get("insight"):
@@ -737,7 +803,7 @@ Be specific and actionable. The lab director will use this to make investment an
                 "text": text,
                 "chunk_id": f"research_{session.session_id}::finding_{i}",
                 "source": f"research_session_{session.session_id}",
-                "source_path": f"research:{f.get('url', '')}",
+                "source_path": f"research:{f.get('url') or ''}",
                 "section": f.get("category", "paper"),
                 "metadata": {"format": ".research", "chunk_index": i},
             })

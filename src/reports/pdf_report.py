@@ -6,7 +6,63 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from reportlab.lib.fonts import addMapping
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Register Noto fonts (system-installed) with ReportLab
+# Falls back to Helvetica/Times if Noto isn't available.
+# ---------------------------------------------------------------------------
+_FONTS_REGISTERED = False
+_SERIF = "Times-Roman"
+_SERIF_BOLD = "Times-Bold"
+_SERIF_ITALIC = "Times-Italic"
+_SANS = "Helvetica"
+_SANS_BOLD = "Helvetica-Bold"
+_SANS_ITALIC = "Helvetica-Oblique"
+_SANS_BOLDITALIC = "Helvetica-BoldOblique"
+
+
+def _register_fonts():
+    global _FONTS_REGISTERED, _SERIF, _SERIF_BOLD, _SERIF_ITALIC
+    global _SANS, _SANS_BOLD, _SANS_ITALIC, _SANS_BOLDITALIC
+    if _FONTS_REGISTERED:
+        return
+    _FONTS_REGISTERED = True
+
+    noto_dir = Path("/usr/share/fonts/truetype/noto")
+    try:
+        # Serif family
+        pdfmetrics.registerFont(TTFont("NotoSerif", str(noto_dir / "NotoSerif-Regular.ttf")))
+        pdfmetrics.registerFont(TTFont("NotoSerif-Bold", str(noto_dir / "NotoSerif-Bold.ttf")))
+        pdfmetrics.registerFont(TTFont("NotoSerif-Italic", str(noto_dir / "NotoSerif-Italic.ttf")))
+        addMapping("NotoSerif", 0, 0, "NotoSerif")
+        addMapping("NotoSerif", 1, 0, "NotoSerif-Bold")
+        addMapping("NotoSerif", 0, 1, "NotoSerif-Italic")
+        _SERIF = "NotoSerif"
+        _SERIF_BOLD = "NotoSerif-Bold"
+        _SERIF_ITALIC = "NotoSerif-Italic"
+
+        # Sans family
+        pdfmetrics.registerFont(TTFont("NotoSans", str(noto_dir / "NotoSans-Regular.ttf")))
+        pdfmetrics.registerFont(TTFont("NotoSans-Bold", str(noto_dir / "NotoSans-Bold.ttf")))
+        pdfmetrics.registerFont(TTFont("NotoSans-Italic", str(noto_dir / "NotoSans-Italic.ttf")))
+        pdfmetrics.registerFont(TTFont("NotoSans-BoldItalic", str(noto_dir / "NotoSans-BoldItalic.ttf")))
+        addMapping("NotoSans", 0, 0, "NotoSans")
+        addMapping("NotoSans", 1, 0, "NotoSans-Bold")
+        addMapping("NotoSans", 0, 1, "NotoSans-Italic")
+        addMapping("NotoSans", 1, 1, "NotoSans-BoldItalic")
+        _SANS = "NotoSans"
+        _SANS_BOLD = "NotoSans-Bold"
+        _SANS_ITALIC = "NotoSans-Italic"
+        _SANS_BOLDITALIC = "NotoSans-BoldItalic"
+
+        logger.info("Registered Noto Sans + Noto Serif for PDF reports")
+    except Exception as e:
+        logger.warning(f"Noto fonts not available, using Helvetica/Times fallback: {e}")
 
 
 def generate_research_pdf(session, output_path: str | Path, final_report: str = ""):
@@ -35,6 +91,8 @@ def generate_research_pdf(session, output_path: str | Path, final_report: str = 
     )
     from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
 
+    _register_fonts()
+
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -62,6 +120,26 @@ def generate_research_pdf(session, output_path: str | Path, final_report: str = 
         top_findings = data.get("top_findings", [])
         trend_reports = data.get("trend_reports", [])
 
+    topic = data.get("topic", "N/A")
+
+    # Page template with running header + page numbers
+    def _page_header_footer(canvas, doc_obj):
+        canvas.saveState()
+        page_w, page_h = A4
+        # Footer: page number centered
+        canvas.setFont(_SANS, 8.5)
+        canvas.setFillColor(colors.HexColor("#888888"))
+        canvas.drawCentredString(page_w / 2, 1.2 * cm, f"{canvas.getPageNumber()}")
+        # Header (skip cover page)
+        if canvas.getPageNumber() > 1:
+            canvas.setFont(_SANS, 7.5)
+            canvas.setFillColor(colors.HexColor("#aaaaaa"))
+            truncated = topic[:80] + "..." if len(topic) > 80 else topic
+            canvas.drawString(2 * cm, page_h - 1.5 * cm, f"Science Lab Swarm  —  {truncated}")
+            canvas.setStrokeColor(colors.HexColor("#e0e0e0"))
+            canvas.line(2 * cm, page_h - 1.7 * cm, page_w - 2 * cm, page_h - 1.7 * cm)
+        canvas.restoreState()
+
     # Setup document
     doc = SimpleDocTemplate(
         str(output_path),
@@ -76,99 +154,110 @@ def generate_research_pdf(session, output_path: str | Path, final_report: str = 
     styles = getSampleStyleSheet()
     styles.add(ParagraphStyle(
         name="CoverTitle",
-        parent=styles["Title"],
-        fontSize=28,
-        spaceAfter=20,
+        fontName=_SERIF_BOLD,
+        fontSize=30,
+        leading=36,
+        spaceAfter=14,
         alignment=TA_CENTER,
         textColor=colors.HexColor("#1a1a2e"),
     ))
     styles.add(ParagraphStyle(
         name="CoverSubtitle",
-        parent=styles["Normal"],
-        fontSize=14,
+        fontName=_SANS,
+        fontSize=12,
+        leading=18,
         alignment=TA_CENTER,
-        textColor=colors.HexColor("#4a4a6a"),
-        spaceAfter=8,
+        textColor=colors.HexColor("#555555"),
+        spaceAfter=6,
+    ))
+    styles.add(ParagraphStyle(
+        name="CoverMeta",
+        fontName=_SANS,
+        fontSize=10,
+        leading=16,
+        alignment=TA_CENTER,
+        textColor=colors.HexColor("#777777"),
+        spaceAfter=5,
     ))
     styles.add(ParagraphStyle(
         name="SectionTitle",
-        parent=styles["Heading1"],
-        fontSize=18,
-        spaceBefore=20,
+        fontName=_SERIF_BOLD,
+        fontSize=17,
+        leading=22,
+        spaceBefore=22,
         spaceAfter=10,
         textColor=colors.HexColor("#1a1a2e"),
-        borderWidth=1,
-        borderColor=colors.HexColor("#e0e0e0"),
-        borderPadding=5,
+        borderWidth=0,
+        borderPadding=0,
     ))
     styles.add(ParagraphStyle(
         name="SubSection",
-        parent=styles["Heading2"],
-        fontSize=14,
-        spaceBefore=12,
+        fontName=_SANS_BOLD,
+        fontSize=13,
+        leading=18,
+        spaceBefore=14,
         spaceAfter=6,
         textColor=colors.HexColor("#2d3436"),
     ))
     styles.add(ParagraphStyle(
         name="BodyText2",
-        parent=styles["BodyText"],
+        fontName=_SERIF,
         fontSize=10,
         alignment=TA_JUSTIFY,
-        spaceAfter=6,
-        leading=14,
+        spaceAfter=7,
+        leading=15,
+        textColor=colors.HexColor("#2c2c2c"),
     ))
     styles.add(ParagraphStyle(
         name="FindingTitle",
-        parent=styles["Normal"],
-        fontSize=11,
-        fontName="Helvetica-Bold",
+        fontName=_SANS_BOLD,
+        fontSize=10.5,
+        leading=14,
         spaceAfter=2,
-        textColor=colors.HexColor("#2d3436"),
+        textColor=colors.HexColor("#1a1a2e"),
     ))
     styles.add(ParagraphStyle(
         name="FindingMeta",
-        parent=styles["Normal"],
-        fontSize=9,
-        textColor=colors.HexColor("#636e72"),
+        fontName=_SANS,
+        fontSize=8.5,
+        leading=12,
+        textColor=colors.HexColor("#777777"),
         spaceAfter=4,
     ))
     styles.add(ParagraphStyle(
         name="Insight",
-        parent=styles["Normal"],
+        fontName=_SERIF_ITALIC,
         fontSize=10,
-        textColor=colors.HexColor("#0984e3"),
+        leading=14,
+        textColor=colors.HexColor("#1a5276"),
         spaceAfter=8,
-        leftIndent=10,
+        leftIndent=12,
     ))
 
     story = []
 
     # === COVER PAGE ===
-    story.append(Spacer(1, 4 * cm))
+    story.append(Spacer(1, 5 * cm))
     story.append(Paragraph("Science Lab Swarm", styles["CoverTitle"]))
-    story.append(Paragraph("Research Discovery Report", styles["CoverSubtitle"]))
-    story.append(Spacer(1, 1 * cm))
-    story.append(HRFlowable(width="60%", color=colors.HexColor("#1a1a2e"), thickness=2))
-    story.append(Spacer(1, 1 * cm))
+    story.append(Spacer(1, 4 * mm))
+    story.append(HRFlowable(width="40%", color=colors.HexColor("#1a5276"), thickness=1.5))
+    story.append(Spacer(1, 8 * mm))
 
-    topic = data.get("topic", "N/A")
     # Truncate for cover page if needed
-    if len(topic) > 120:
-        topic_display = topic[:117] + "..."
-    else:
-        topic_display = topic
-    story.append(Paragraph(f"<b>Topic:</b> {_escape(topic_display)}", styles["CoverSubtitle"]))
+    topic_display = topic[:117] + "..." if len(topic) > 120 else topic
+    story.append(Paragraph(_escape(topic_display), styles["CoverSubtitle"]))
+    story.append(Spacer(1, 1.5 * cm))
     story.append(Paragraph(
-        f"<b>Duration:</b> {data.get('elapsed_hours', 0):.1f} hours | "
-        f"<b>Cycles:</b> {data.get('cycles_completed', 0)} | "
-        f"<b>Results:</b> {data.get('total_unique_results', 0)}",
-        styles["CoverSubtitle"],
+        f"{data.get('elapsed_hours', 0):.1f} hours  ·  "
+        f"{data.get('cycles_completed', 0)} cycles  ·  "
+        f"{data.get('total_unique_results', 0)} results",
+        styles["CoverMeta"],
     ))
     story.append(Paragraph(
-        f"<b>Generated:</b> {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-        styles["CoverSubtitle"],
+        datetime.now().strftime("%B %d, %Y"),
+        styles["CoverMeta"],
     ))
-    story.append(Spacer(1, 2 * cm))
+    story.append(Spacer(1, 2.5 * cm))
 
     # Summary stats table
     stats_data = [
@@ -183,15 +272,17 @@ def generate_research_pdf(session, output_path: str | Path, final_report: str = 
     ]
     stats_table = Table(stats_data, colWidths=[8 * cm, 4 * cm])
     stats_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a1a2e")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a5276")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 11),
+        ("FONTNAME", (0, 0), (-1, 0), _SANS_BOLD),
+        ("FONTNAME", (0, 1), (-1, -1), _SANS),
+        ("FONTSIZE", (0, 0), (-1, 0), 9.5),
+        ("FONTSIZE", (0, 1), (-1, -1), 10),
         ("ALIGN", (1, 0), (1, -1), "CENTER"),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#dfe6e9")),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f6fa")]),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e0e0e0")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7f8fa")]),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
     ]))
     story.append(stats_table)
     story.append(PageBreak())
@@ -351,7 +442,7 @@ def generate_research_pdf(session, output_path: str | Path, final_report: str = 
     ))
 
     # Build PDF
-    doc.build(story)
+    doc.build(story, onFirstPage=_page_header_footer, onLaterPages=_page_header_footer)
     logger.info(f"PDF report saved: {output_path}")
     return str(output_path)
 
@@ -361,9 +452,11 @@ def generate_analysis_pdf(state, output_path: str | Path):
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import cm
+    from reportlab.lib.units import cm, mm
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, HRFlowable
     from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+
+    _register_fonts()
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -373,25 +466,70 @@ def generate_analysis_pdf(state, output_path: str | Path):
     else:
         data = state
 
+    topic = data.get("topic", "N/A")
+
+    def _analysis_header_footer(canvas, doc_obj):
+        canvas.saveState()
+        page_w, page_h = A4
+        canvas.setFont(_SANS, 8.5)
+        canvas.setFillColor(colors.HexColor("#888888"))
+        canvas.drawCentredString(page_w / 2, 1.2 * cm, f"{canvas.getPageNumber()}")
+        if canvas.getPageNumber() > 1:
+            canvas.setFont(_SANS, 7.5)
+            canvas.setFillColor(colors.HexColor("#aaaaaa"))
+            truncated = topic[:80] + "..." if len(topic) > 80 else topic
+            canvas.drawString(2 * cm, page_h - 1.5 * cm, f"Science Lab Swarm  —  {truncated}")
+            canvas.setStrokeColor(colors.HexColor("#e0e0e0"))
+            canvas.line(2 * cm, page_h - 1.7 * cm, page_w - 2 * cm, page_h - 1.7 * cm)
+        canvas.restoreState()
+
     doc = SimpleDocTemplate(str(output_path), pagesize=A4,
                             rightMargin=2 * cm, leftMargin=2 * cm,
                             topMargin=2.5 * cm, bottomMargin=2 * cm)
 
     styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name="Title2", parent=styles["Title"], fontSize=24, alignment=TA_CENTER))
-    styles.add(ParagraphStyle(name="Body2", parent=styles["BodyText"], fontSize=10, alignment=TA_JUSTIFY, leading=14))
-    styles.add(ParagraphStyle(name="Section2", parent=styles["Heading1"], fontSize=16, spaceBefore=16, spaceAfter=8))
-    styles.add(ParagraphStyle(name="AgentName", parent=styles["Heading2"], fontSize=13, textColor=colors.HexColor("#0984e3")))
+    styles.add(ParagraphStyle(
+        name="Title2", fontName=_SERIF_BOLD,
+        fontSize=26, leading=32, alignment=TA_CENTER,
+        textColor=colors.HexColor("#1a1a2e"), spaceAfter=10,
+    ))
+    styles.add(ParagraphStyle(
+        name="CoverMeta2", fontName=_SANS,
+        fontSize=10, leading=16, alignment=TA_CENTER,
+        textColor=colors.HexColor("#777777"), spaceAfter=5,
+    ))
+    styles.add(ParagraphStyle(
+        name="Body2", fontName=_SERIF,
+        fontSize=10, alignment=TA_JUSTIFY, leading=15,
+        spaceAfter=7, textColor=colors.HexColor("#2c2c2c"),
+    ))
+    styles.add(ParagraphStyle(
+        name="Section2", fontName=_SERIF_BOLD,
+        fontSize=16, leading=21, spaceBefore=18, spaceAfter=8,
+        textColor=colors.HexColor("#1a1a2e"),
+    ))
+    styles.add(ParagraphStyle(
+        name="AgentName", fontName=_SANS_BOLD,
+        fontSize=11, leading=15, spaceBefore=12, spaceAfter=4,
+        textColor=colors.HexColor("#1a5276"),
+    ))
 
     story = []
 
     # Cover
-    story.append(Spacer(1, 4 * cm))
+    story.append(Spacer(1, 5 * cm))
     story.append(Paragraph("Scientific Analysis Report", styles["Title2"]))
-    story.append(Spacer(1, 1 * cm))
-    story.append(Paragraph(f"<b>Topic:</b> {_escape(data.get('topic', 'N/A'))}", styles["Body2"]))
-    story.append(Paragraph(f"<b>Rounds:</b> {data.get('round_num', 0)} | <b>Documents:</b> {len(data.get('documents_analyzed', []))}", styles["Body2"]))
-    story.append(Paragraph(f"<b>Generated:</b> {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles["Body2"]))
+    story.append(Spacer(1, 4 * mm))
+    story.append(HRFlowable(width="40%", color=colors.HexColor("#1a5276"), thickness=1.5))
+    story.append(Spacer(1, 8 * mm))
+    story.append(Paragraph(_escape(topic), styles["CoverMeta2"]))
+    story.append(Spacer(1, 1.5 * cm))
+    story.append(Paragraph(
+        f"{data.get('round_num', 0)} rounds  ·  "
+        f"{len(data.get('documents_analyzed', []))} documents",
+        styles["CoverMeta2"],
+    ))
+    story.append(Paragraph(datetime.now().strftime("%B %d, %Y"), styles["CoverMeta2"]))
     story.append(PageBreak())
 
     # Synthesis
@@ -406,16 +544,16 @@ def generate_analysis_pdf(state, output_path: str | Path):
     story.append(Paragraph("Analysis Transcript", styles["Section2"]))
     for turn in data.get("turns", []):
         story.append(Paragraph(
-            f"{turn.get('name', turn.get('agent', 'Agent'))} — Round {turn.get('round_num', '?')}",
+            f"{turn.get('name', turn.get('agent', 'Agent'))}  —  Round {turn.get('round_num', '?')}",
             styles["AgentName"],
         ))
         analysis = turn.get("analysis", turn.get("text", ""))
         for p in analysis.split("\n\n"):
             if p.strip():
                 story.append(Paragraph(_escape(p.strip()), styles["Body2"]))
-        story.append(Spacer(1, 8))
+        story.append(Spacer(1, 10))
 
-    doc.build(story)
+    doc.build(story, onFirstPage=_analysis_header_footer, onLaterPages=_analysis_header_footer)
     logger.info(f"Analysis PDF saved: {output_path}")
     return str(output_path)
 

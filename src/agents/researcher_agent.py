@@ -65,9 +65,28 @@ Generate 5-8 specific search queries that will help discover:
 4. Patent filings that indicate commercial activity
 5. Competing research groups and their approaches
 
+CRITICAL QUERY RULES:
+- Every query MUST be directly relevant to the RESEARCH TOPIC above
+- Keep queries SHORT: 3-6 words, no more than 8 words maximum
+- Do NOT chain many AND terms together — simple phrases work best
+- Do NOT add unrelated buzzwords (e.g., "prompt engineering", "digital twin", "RAG") unless they are part of the original topic
+- Use natural language, not complex boolean syntax
+- Vary queries: some broad ("NIR calibration transfer"), some specific ("PLS model standardization NIR")
+- Match database to query type: arxiv/semantic_scholar for papers, pubmed for biomedical, google_patents for patents, supplier_search for products
+
+GOOD query examples:
+- "NIR calibration transfer deep learning"
+- "transformer model spectroscopy"
+- "inline NIR process monitoring"
+- "handheld NIR analyzer pharmaceutical"
+
+BAD query examples (DO NOT do this):
+- "NIR AND prompt engineering AND digital twin AND federated learning AND multi-agent"
+- "arxiv.org NIR AND AI-powered calibration AND continuous monitoring"
+
 For each query, specify:
-- The exact search string
-- Which database to search (semantic_scholar, arxiv, pubmed, google_patents, supplier_search, duckduckgo)
+- The exact search string (short, focused)
+- Which database to search (semantic_scholar, arxiv, pubmed, openalex, google_patents, supplier_search, preprint_servers, duckduckgo)
 - Why this query is important
 
 Respond as JSON array: [{{"query": "...", "database": "...", "rationale": "..."}}]"""
@@ -76,9 +95,9 @@ Respond as JSON array: [{{"query": "...", "database": "...", "rationale": "..."}
         """Generate a prompt for the agent to evaluate and rank findings."""
         findings_text = ""
         for i, f in enumerate(findings, 1):
-            findings_text += f"\n[{i}] Title: {f.get('title', 'N/A')}\n"
-            findings_text += f"    Source: {f.get('source', 'N/A')}\n"
-            findings_text += f"    Abstract: {f.get('abstract', 'N/A')[:300]}\n"
+            findings_text += f"\n[{i}] Title: {f.get('title') or 'N/A'}\n"
+            findings_text += f"    Source: {f.get('source') or 'N/A'}\n"
+            findings_text += f"    Abstract: {(f.get('abstract') or 'N/A')[:300]}\n"
 
         return f"""Evaluate the following research findings for laboratory relevance and innovation potential.
 
@@ -87,13 +106,20 @@ RESEARCH TOPIC: {self.topic}
 FINDINGS:
 {findings_text}
 
+SCORING RULES:
+- RELEVANCE must reflect DIRECT connection to the RESEARCH TOPIC above
+- A paper that merely mentions a keyword (e.g., "NIR") but is about an unrelated field (e.g., astronomy, astrophysics) must score RELEVANCE 1-2
+- Only score RELEVANCE >= 7 if the finding directly addresses the core research topic
+- Be strict: a tangential mention is NOT relevant
+- If a finding is clearly off-topic, set all scores to 1 and category to "paper"
+
 For each finding, provide:
-1. RELEVANCE SCORE (1-10): How relevant is this to the research topic?
+1. RELEVANCE SCORE (1-10): How DIRECTLY relevant is this to the EXACT research topic? (strict — tangential = low)
 2. NOVELTY SCORE (1-10): How new or innovative is this?
 3. ACTIONABILITY SCORE (1-10): How easily can the lab act on this?
 4. CATEGORY: paper | product | technique | opportunity | competitor
-5. KEY INSIGHT: One sentence describing why this matters
-6. NEXT STEP: One specific action the lab should take
+5. KEY INSIGHT: One sentence describing why this matters (or "Off-topic" if not relevant)
+6. NEXT STEP: One specific action the lab should take (or "Skip" if not relevant)
 
 Respond as JSON array: [{{"index": N, "relevance": N, "novelty": N, "actionability": N, "category": "...", "insight": "...", "next_step": "..."}}]"""
 

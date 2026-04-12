@@ -1,22 +1,37 @@
 """ChromaDB vector indexer for document chunks."""
 
 import logging
+import os
+import warnings
 from pathlib import Path
 
 import chromadb
-from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
 
 _embedding_model = None
 
 
-def get_embedding_model(model_name: str = "all-MiniLM-L6-v2") -> SentenceTransformer:
+def get_embedding_model(model_name: str = "all-MiniLM-L6-v2"):
     """Lazy-load the embedding model (CPU-only)."""
     global _embedding_model
     if _embedding_model is None:
         logger.info(f"Loading embedding model: {model_name}")
-        _embedding_model = SentenceTransformer(model_name, device="cpu")
+        # Suppress noisy HF/exllamav2 output during load (progress bars,
+        # LOAD REPORT tables, unauthenticated-request warnings).
+        os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+        os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+        logging.getLogger("transformers").setLevel(logging.ERROR)
+        logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+        import contextlib
+        import io
+        from sentence_transformers import SentenceTransformer
+        with contextlib.redirect_stdout(io.StringIO()), \
+             contextlib.redirect_stderr(io.StringIO()), \
+             warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            _embedding_model = SentenceTransformer(model_name, device="cpu")
+        logger.info(f"Embedding model ready: {model_name}")
     return _embedding_model
 
 
@@ -27,7 +42,15 @@ class DocumentIndexer:
         self.persist_dir = Path(persist_dir)
         self.persist_dir.mkdir(parents=True, exist_ok=True)
         self.client = chromadb.PersistentClient(path=str(self.persist_dir))
-        self.model = get_embedding_model(embedding_model)
+        self._embedding_model_name = embedding_model
+        self._model = None
+
+    @property
+    def model(self):
+        """Lazy-load embedding model on first use (not needed for list/stats)."""
+        if self._model is None:
+            self._model = get_embedding_model(self._embedding_model_name)
+        return self._model
 
     def index_chunks(self, chunks: list[dict], collection_name: str = "lab_documents") -> int:
         """Add chunks to a ChromaDB collection.

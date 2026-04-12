@@ -139,21 +139,21 @@ def _parse_bibtex(path: Path) -> dict:
     import bibtexparser
 
     with open(path) as f:
-        bib = bibtexparser.parse(f.read())
+        bib = bibtexparser.loads(f.read())
 
     entries = []
     for entry in bib.entries:
         parts = []
-        if "title" in entry.fields_dict:
-            parts.append(f"Title: {entry.fields_dict['title'].value}")
-        if "author" in entry.fields_dict:
-            parts.append(f"Authors: {entry.fields_dict['author'].value}")
-        if "year" in entry.fields_dict:
-            parts.append(f"Year: {entry.fields_dict['year'].value}")
-        if "journal" in entry.fields_dict:
-            parts.append(f"Journal: {entry.fields_dict['journal'].value}")
-        if "abstract" in entry.fields_dict:
-            parts.append(f"Abstract: {entry.fields_dict['abstract'].value}")
+        if "title" in entry:
+            parts.append(f"Title: {entry['title']}")
+        if "author" in entry:
+            parts.append(f"Authors: {entry['author']}")
+        if "year" in entry:
+            parts.append(f"Year: {entry['year']}")
+        if "journal" in entry:
+            parts.append(f"Journal: {entry['journal']}")
+        if "abstract" in entry:
+            parts.append(f"Abstract: {entry['abstract']}")
         entries.append("\n".join(parts))
 
     text = "\n\n---\n\n".join(entries)

@@ -33,6 +33,7 @@ def print_menu():
     print("  [r] Research agent     (autonomous discovery, runs for hours)")
     print("  [f] Quick research     (30-min focused scan)")
     print()
+    print("  [w] Web dashboard      (full stack — browser menu + live monitoring)")
     print("  [s] System status      (TabbyAPI, models, collections)")
     print("  [q] Quit")
     print()
@@ -180,6 +181,113 @@ def run_quick_research():
     subprocess.run(cmd)
 
 
+def _find_tabbyapi_dir() -> Path | None:
+    """Locate the TabbyAPI installation (expected at ./tabbyAPI in the project)."""
+    tabby_dir = Path(__file__).parent / "tabbyAPI"
+    if (tabby_dir / "start.sh").exists():
+        return tabby_dir.resolve()
+    return None
+
+
+def system_up():
+    """Start the complete system: TabbyAPI + dashboard + browser."""
+    import time
+    import webbrowser
+
+    print("\n  Starting complete system...\n")
+
+    url = "http://127.0.0.1:8000"
+    tabby_proc = None
+
+    # Step 1: Start TabbyAPI if not already running
+    print("  Checking TabbyAPI...")
+    try:
+        import yaml
+        from src.tabby_client import TabbyClient
+
+        with open("config/settings.yaml") as f:
+            config = yaml.safe_load(f)
+
+        tabby = TabbyClient(base_url=config["tabbyapi"]["url"])
+        if tabby.health_check():
+            print(f"    Already ONLINE  ({config['tabbyapi']['url']})")
+        else:
+            tabby_dir = _find_tabbyapi_dir()
+            if tabby_dir:
+                print(f"    OFFLINE — starting TabbyAPI from {tabby_dir}")
+                tabby_log = Path("output") / ".tabbyapi.log"
+                tabby_log.parent.mkdir(parents=True, exist_ok=True)
+                log_file = open(tabby_log, "w")
+                tabby_proc = subprocess.Popen(
+                    ["bash", "start.sh"],
+                    cwd=str(tabby_dir),
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                )
+                # Wait for TabbyAPI to become ready
+                print("    Waiting for TabbyAPI to start", end="", flush=True)
+                for _ in range(30):
+                    time.sleep(2)
+                    print(".", end="", flush=True)
+                    if tabby.health_check():
+                        break
+                    if tabby_proc.poll() is not None:
+                        print(f"\n    ERROR: TabbyAPI exited (code {tabby_proc.returncode}). Check {tabby_log}")
+                        tabby_proc = None
+                        break
+                else:
+                    print("\n    WARNING: TabbyAPI did not respond within 60s. Continuing anyway.")
+                    print(f"    Check log: {tabby_log}")
+
+                if tabby_proc and tabby.health_check():
+                    print(f"\n    ONLINE  (PID {tabby_proc.pid})")
+            else:
+                print("    OFFLINE — TabbyAPI installation not found.")
+                print("    Start TabbyAPI manually to run research/analysis sessions.")
+    except Exception as e:
+        print(f"    Check failed: {e}")
+
+    # Step 2: Start dashboard server
+    print("\n  Starting dashboard server...")
+    dashboard_proc = subprocess.Popen(
+        [sys.executable, "dashboard.py", "--host", "127.0.0.1", "--port", "8000"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    time.sleep(1.5)
+
+    if dashboard_proc.poll() is not None:
+        print("  ERROR: Dashboard failed to start.")
+        if tabby_proc:
+            tabby_proc.terminate()
+        return
+
+    print(f"    Running at {url}  (PID {dashboard_proc.pid})")
+
+    # Step 3: Open browser
+    print()
+    try:
+        webbrowser.open(url)
+        print(f"  Browser opened to {url}")
+    except Exception:
+        print(f"  Open {url} in your browser")
+
+    services = "Dashboard + TabbyAPI" if tabby_proc else "Dashboard"
+    print(f"\n  System is up ({services}). Press Ctrl+C to stop.\n")
+
+    try:
+        dashboard_proc.wait()
+    except KeyboardInterrupt:
+        print("\n  Shutting down...")
+        dashboard_proc.terminate()
+        print("    Dashboard stopped.")
+        if tabby_proc and tabby_proc.poll() is None:
+            tabby_proc.terminate()
+            tabby_proc.wait(timeout=10)
+            print("    TabbyAPI stopped.")
+
+
 def main():
     ensure_venv()
 
@@ -196,6 +304,7 @@ def main():
             "6": lambda: print("  TODO: Script runner"),
             "r": run_research_agent,
             "f": run_quick_research,
+            "w": system_up,
             "s": system_status,
             "q": lambda: sys.exit(0),
         }
